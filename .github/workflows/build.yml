@@ -22,6 +22,8 @@ jobs:
 
     - name: Setup Global Gradle
       uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.6' # <-- This forces the correct, compatible Gradle version
 
     - name: Build Debug APK (Without Wrapper)
       run: gradle assembleDebug
