@@ -1,6 +1,7 @@
 package com.jcv.mocktests.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize // Added missing import
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -11,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp // Added missing import
 import com.google.firebase.auth.FirebaseAuth
 
 enum class BottomTab { HOME, MY_TESTS, PROFILE }
@@ -40,7 +42,6 @@ fun MainDashboardScreen(
                 contentColor = Color(0xFF1E293B),
                 tonalElevation = 8.dp
             ) {
-                // 1. HOME (Store Front)
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
                     label = { Text("Home", fontWeight = FontWeight.SemiBold) },
@@ -53,7 +54,6 @@ fun MainDashboardScreen(
                     )
                 )
                 
-                // 2. MY TESTS (Purchased / Attempted - Protected)
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.List, contentDescription = "My Tests") },
                     label = { Text("My Tests", fontWeight = FontWeight.SemiBold) },
@@ -67,7 +67,6 @@ fun MainDashboardScreen(
                     }
                 )
                 
-                // 3. PROFILE (Settings / Account - Protected)
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                     label = { Text("Profile", fontWeight = FontWeight.SemiBold) },
@@ -89,13 +88,11 @@ fun MainDashboardScreen(
                     HomeScreen(onNavigateToCourse = onNavigateToCourse)
                 }
                 BottomTab.MY_TESTS -> {
-                    // TODO: Replace with your actual My Tests / Purchased view
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                         Text("Your Purchased Test Series will appear here.")
                     }
                 }
                 BottomTab.PROFILE -> {
-                    // TODO: Replace with your actual Profile / Settings view
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                         Text("Profile & Settings")
                     }
