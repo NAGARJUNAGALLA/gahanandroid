@@ -1,7 +1,7 @@
 package com.jcv.mocktests.ui
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize // Added missing import
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -12,7 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp // Added missing import
+import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 
 enum class BottomTab { HOME, MY_TESTS, PROFILE }
@@ -34,29 +34,32 @@ fun MainDashboardScreen(
     }
     
     val auth = FirebaseAuth.getInstance()
+    val ByjusPurple = Color(0xFF6D28D9)
 
     Scaffold(
         bottomBar = {
             NavigationBar(
                 containerColor = Color.White,
-                contentColor = Color(0xFF1E293B),
-                tonalElevation = 8.dp
+                contentColor = Color.Gray,
+                tonalElevation = 16.dp
             ) {
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                    label = { Text("Home", fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Home", fontWeight = FontWeight.Bold) },
                     selected = selectedTab == BottomTab.HOME,
                     onClick = { selectedTab = BottomTab.HOME },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Color(0xFF1E90FF),
-                        selectedTextColor = Color(0xFF1E90FF),
-                        indicatorColor = Color(0xFFEFF6FF)
+                        selectedIconColor = ByjusPurple,
+                        selectedTextColor = ByjusPurple,
+                        indicatorColor = ByjusPurple.copy(alpha = 0.1f),
+                        unselectedIconColor = Color.LightGray,
+                        unselectedTextColor = Color.LightGray
                     )
                 )
                 
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.List, contentDescription = "My Tests") },
-                    label = { Text("My Tests", fontWeight = FontWeight.SemiBold) },
+                    label = { Text("My Tests", fontWeight = FontWeight.Bold) },
                     selected = selectedTab == BottomTab.MY_TESTS,
                     onClick = {
                         if (auth.currentUser == null) {
@@ -69,7 +72,7 @@ fun MainDashboardScreen(
                 
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                    label = { Text("Profile", fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Profile", fontWeight = FontWeight.Bold) },
                     selected = selectedTab == BottomTab.PROFILE,
                     onClick = {
                         if (auth.currentUser == null) {
@@ -88,9 +91,7 @@ fun MainDashboardScreen(
                     HomeScreen(onNavigateToCourse = onNavigateToCourse)
                 }
                 BottomTab.MY_TESTS -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                        Text("Your Purchased Test Series will appear here.")
-                    }
+                    MyPurchasedTestsScreen(onNavigateToCourse = onNavigateToCourse)
                 }
                 BottomTab.PROFILE -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
