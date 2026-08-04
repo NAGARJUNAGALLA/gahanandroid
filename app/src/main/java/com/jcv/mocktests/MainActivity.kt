@@ -4,9 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
 import com.jcv.mocktests.ui.*
 import java.net.URLDecoder
@@ -49,22 +51,34 @@ fun MockTestsApp() {
             val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
             CourseDetailScreen(
                 courseId = courseId,
-                onNavigateToExam = { testName -> 
+                // Updated lambda to accept courseId, testName, and isReviewMode
+                onNavigateToExam = { cId, testName, isReviewMode -> 
                     // URL encode the test name just in case it has spaces
                     val encodedTestName = URLEncoder.encode(testName, "UTF-8")
-                    navController.navigate("exam/$courseId/$encodedTestName") 
+                    // Append isReviewMode to the navigation route
+                    navController.navigate("exam/$cId/$encodedTestName/$isReviewMode") 
                 },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        // Updated route to accept both courseId and testName
-        composable("exam/{courseId}/{testName}") { backStackEntry ->
+        
+        // Updated route to accept courseId, testName, and isReviewMode
+        composable(
+            route = "exam/{courseId}/{testName}/{isReviewMode}",
+            arguments = listOf(
+                navArgument("courseId") { type = NavType.StringType },
+                navArgument("testName") { type = NavType.StringType },
+                navArgument("isReviewMode") { type = NavType.BoolType }
+            )
+        ) { backStackEntry ->
             val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
             val testName = URLDecoder.decode(backStackEntry.arguments?.getString("testName") ?: "", "UTF-8")
+            val isReviewMode = backStackEntry.arguments?.getBoolean("isReviewMode") ?: false
             
             ExamScreen(
                 courseId = courseId,
                 testName = testName,
+                isReviewMode = isReviewMode,
                 onFinalSubmit = { score, total -> 
                     navController.navigate("results/$score/$total") { popUpTo("home") }
                 }
