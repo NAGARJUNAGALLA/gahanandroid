@@ -13,8 +13,7 @@ import com.jcv.mocktests.models.QuestionStatus
 import kotlinx.coroutines.delay
 
 @Composable
-fun ExamScreen(onFinalSubmit: () -> Unit) {
-    // Dummy Data mirroring Firebase/Sheet response
+fun ExamScreen(onFinalSubmit: (Int, Int) -> Unit) { // <-- Now accepts Int, Int for Score/Total
     val questions = listOf(
         Question(1, "What is the capital of India?", listOf("Delhi", "Mumbai", "Chennai", "Kolkata"), 0),
         Question(2, "29 - 6 = ?", listOf("21", "22", "23", "24"), 2)
@@ -22,15 +21,25 @@ fun ExamScreen(onFinalSubmit: () -> Unit) {
 
     var currentQIndex by remember { mutableStateOf(0) }
     val questionStates = remember { mutableStateListOf(*Array(questions.size) { QuestionState() }) }
-    var timeLeft by remember { mutableIntStateOf(3600) } // 60 mins
+    var timeLeft by remember { mutableIntStateOf(3600) }
 
-    // Timer Logic
+    // Helper function to calculate score and submit
+    fun submitExam() {
+        var score = 0
+        questions.forEachIndexed { index, question ->
+            if (questionStates[index].selectedOption == question.correct) {
+                score++
+            }
+        }
+        onFinalSubmit(score, questions.size)
+    }
+
     LaunchedEffect(key1 = timeLeft) {
         if (timeLeft > 0) {
             delay(1000L)
             timeLeft--
         } else {
-            onFinalSubmit()
+            submitExam()
         }
     }
 
@@ -38,7 +47,6 @@ fun ExamScreen(onFinalSubmit: () -> Unit) {
     val currentState = questionStates[currentQIndex]
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header
         Surface(color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth()) {
             Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("CBT Simulator", color = MaterialTheme.colorScheme.onPrimary)
@@ -46,7 +54,6 @@ fun ExamScreen(onFinalSubmit: () -> Unit) {
             }
         }
 
-        // Question Area
         Column(modifier = Modifier.weight(1f).padding(16.dp)) {
             Text("Q ${currentQIndex + 1}. ${currentQ.text}", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(16.dp))
@@ -64,7 +71,7 @@ fun ExamScreen(onFinalSubmit: () -> Unit) {
                 ) {
                     RadioButton(
                         selected = (currentState.selectedOption == index),
-                        onClick = null // Handled by selectable Row
+                        onClick = null 
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = text)
@@ -72,7 +79,6 @@ fun ExamScreen(onFinalSubmit: () -> Unit) {
             }
         }
 
-        // Footer Actions (Clear, Mark & Next, Save & Next)
         Row(
             modifier = Modifier.fillMaxWidth().padding(8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -90,7 +96,7 @@ fun ExamScreen(onFinalSubmit: () -> Unit) {
             Button(onClick = {
                 val status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED else QuestionStatus.NOT_ANSWERED
                 questionStates[currentQIndex] = currentState.copy(status = status)
-                if (currentQIndex < questions.size - 1) currentQIndex++ else onFinalSubmit()
+                if (currentQIndex < questions.size - 1) currentQIndex++ else submitExam() // <-- Updated submission logic
             }) { Text(if (currentQIndex == questions.size - 1) "Submit" else "Save & Next") }
         }
     }
