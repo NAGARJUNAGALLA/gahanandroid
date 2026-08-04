@@ -3,7 +3,7 @@ package com.jcv.mocktests.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Info // Changed from Book to Info to fix the compile error
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
@@ -19,7 +19,6 @@ fun MainDashboardScreen(
     onNavigateToCourse: (String) -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
-    // Determine which tab to show based on navigation arguments
     var selectedTab by remember(initialTab) {
         mutableStateOf(
             when (initialTab) {
@@ -35,31 +34,27 @@ fun MainDashboardScreen(
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
-                // 1. STUDY MATERIAL TAB
+                
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Book, contentDescription = "Study Material") },
+                    icon = { Icon(Icons.Default.Info, contentDescription = "Study Material") },
                     label = { Text("Study") },
                     selected = selectedTab == BottomTab.STUDY_MATERIAL,
                     onClick = { selectedTab = BottomTab.STUDY_MATERIAL }
                 )
                 
-                // 2. TESTS TAB (Protected by Login)
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.List, contentDescription = "Tests") },
                     label = { Text("Tests") },
                     selected = selectedTab == BottomTab.TESTS,
                     onClick = {
                         if (auth.currentUser == null) {
-                            // If not logged in, trigger login navigation
                             onNavigateToLogin()
                         } else {
-                            // If logged in, show the tests screen
                             selectedTab = BottomTab.TESTS
                         }
                     }
                 )
                 
-                // 3. VIDEOS TAB
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Videos") },
                     label = { Text("Videos") },
@@ -69,26 +64,24 @@ fun MainDashboardScreen(
             }
         }
     ) { paddingValues ->
-        // Render the content of the selected tab
         Box(modifier = Modifier.padding(paddingValues)) {
             when (selectedTab) {
                 BottomTab.STUDY_MATERIAL -> {
                     StudyMaterialScreen(
-                        url = "https://your-web-app-link.com/study-notes", 
-                        onNavigateBack = {} // Left empty since it's a top-level tab now
+                        url = "https://jcv-mock-tests.web.app/studymaterial.html", 
+                        onNavigateBack = {} 
                     )
                 }
                 BottomTab.TESTS -> {
-                    // This calls your existing HomeScreen content
+                    // Passes the required parameter to fix line 85 error
                     HomeScreen(
                         onNavigateToCourse = onNavigateToCourse,
                         onNavigateToStudyMaterial = { selectedTab = BottomTab.STUDY_MATERIAL }
                     )
                 }
                 BottomTab.VIDEOS -> {
-                    // Reusing your WebView logic for the videos page
                     StudyMaterialScreen(
-                        url = "https://your-web-app-link.com/videos", 
+                        url = "https://jcv-mock-tests.web.app/videos.html", 
                         onNavigateBack = {} 
                     )
                 }
