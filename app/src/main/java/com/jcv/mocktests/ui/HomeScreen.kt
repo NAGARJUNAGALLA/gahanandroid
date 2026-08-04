@@ -12,13 +12,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info // Changed from Book to Info to fix compile error
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.models.Course
 import java.util.Locale
@@ -36,7 +38,10 @@ val DarkGradient = Brush.linearGradient(listOf(Color(0xFF0F172A), Color(0xFF1E3A
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
+fun HomeScreen(
+    onNavigateToCourse: (String) -> Unit,
+    onNavigateToStudyMaterial: () -> Unit // Fixed parameter mismatch
+) {
     var courses by remember { mutableStateOf<List<Course>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -44,7 +49,6 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     var activeTopic by remember { mutableStateOf("ALL") }
 
-    // Fetch and auto-categorize courses (Mirroring web app logic)
     LaunchedEffect(Unit) {
         val db = FirebaseFirestore.getInstance()
         db.collection("exams").document("testList").get()
@@ -55,7 +59,6 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
                         val title = map["title"] as? String ?: "JCV Course"
                         val titleUpper = title.uppercase(Locale.getDefault())
                         
-                        // Web app's auto-categorization logic
                         val topic = when {
                             titleUpper.contains("GROUP") -> "GROUP EXAMS"
                             titleUpper.contains("CURRENT") -> "CURRENT AFFAIRS"
@@ -84,7 +87,6 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
             }
     }
 
-    // Filter Logic
     val filteredCourses = courses.filter { course ->
         val matchesTopic = when (activeTopic) {
             "ALL" -> true
@@ -95,7 +97,6 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
         matchesTopic && matchesSearch
     }
 
-    // Extract dynamic topics for chips
     val dynamicTopics = courses.map { it.topic }.distinct()
     val allTopics = listOf("ALL", "FREE") + dynamicTopics
 
@@ -103,7 +104,12 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("JCV MOCK TESTS", fontWeight = FontWeight.Black, color = Color.White) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = JcvBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = JcvBlue),
+                actions = {
+                    IconButton(onClick = { FirebaseAuth.getInstance().signOut() }) {
+                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color.White)
+                    }
+                }
             )
         }
     ) { padding ->
@@ -111,10 +117,23 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(Color(0xFFF8FAFC)) // Web app background color
+                .background(Color(0xFFF8FAFC))
                 .padding(16.dp)
         ) {
-            // 1. Search Bar
+            
+            Button(
+                onClick = onNavigateToStudyMaterial,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF491569)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Info, contentDescription = "Study Material", tint = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("View Study Material Notes", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -141,7 +160,6 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
             
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. Filter Chips
             Text("FILTER BY TOPICS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 1.sp)
             Spacer(modifier = Modifier.height(8.dp))
             
@@ -156,15 +174,8 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
                     
                     Box(
                         modifier = Modifier
-                            .background(
-                                if (isActive) Color(0xFFEFF6FF) else Color.White,
-                                RoundedCornerShape(4.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (isActive) JcvBlue else Color(0xFFE2E8F0),
-                                RoundedCornerShape(4.dp)
-                            )
+                            .background(if (isActive) Color(0xFFEFF6FF) else Color.White, RoundedCornerShape(4.dp))
+                            .border(1.dp, if (isActive) JcvBlue else Color(0xFFE2E8F0), RoundedCornerShape(4.dp))
                             .clickable { activeTopic = topic }
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
@@ -180,11 +191,9 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 3. Course Grid Header
             Text("COURSES (${filteredCourses.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, letterSpacing = 1.sp)
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 4. Course Grid (2 Columns just like the web app)
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = JcvBlue)
@@ -212,81 +221,40 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
 @Composable
 fun CourseCard(course: Course, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
-    val mockOriginalPrice = if (isFree) 0.0 else course.fee * 2.0 // Mocking original price logic
+    val mockOriginalPrice = if (isFree) 0.0 else course.fee * 2.0
     val discountPercent = if (!isFree) (((mockOriginalPrice - course.fee) / mockOriginalPrice) * 100).toInt() else 0
-    val mockLikes = remember { (100..999).random() } // Mocking likes as per web app
+    val mockLikes = remember { (100..999).random() }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(4.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
-            // Recreating the SVG Thumbnail from Web
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.6f) // Standard banner ratio
-                    .background(DarkGradient)
+                modifier = Modifier.fillMaxWidth().aspectRatio(1.6f).background(DarkGradient)
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = "JCV MOCK TESTS",
-                        color = Color(0xFFFACC15),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
-                    )
+                    Text(text = "JCV MOCK TESTS", color = Color(0xFFFACC15), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFFEF4444), RoundedCornerShape(2.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = course.title.take(20).uppercase(),
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Box(modifier = Modifier.background(Color(0xFFEF4444), RoundedCornerShape(2.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                        Text(text = course.title.take(20).uppercase(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "FULL COURSE",
-                        color = Color(0xFF38BDF8),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Black
-                    )
+                    Text(text = "FULL COURSE", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Black)
                 }
             }
 
-            // Course Details (Bottom Half)
             Column(modifier = Modifier.padding(8.dp)) {
-                Text(
-                    text = course.title,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.DarkGray,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.height(32.dp)
-                )
+                Text(text = course.title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.DarkGray, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(32.dp))
                 
-                // Likes
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.background(Color(0xFFF9FAFB), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.background(Color(0xFFF9FAFB), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
                         Icon(Icons.Default.ThumbUp, contentDescription = "Likes", tint = Color(0xFFEF4444), modifier = Modifier.size(10.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(mockLikes.toString(), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
@@ -297,36 +265,15 @@ fun CourseCard(course: Course, onClick: () -> Unit) {
                 Divider(color = Color(0xFFE2E8F0), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Pricing Section
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                     Column {
                         if (!isFree) Text("₹", fontSize = 9.sp, color = Color.Gray)
-                        Text(
-                            text = if (isFree) "Free" else "%.0f".format(course.fee),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
+                        Text(text = if (isFree) "Free" else "%.0f".format(course.fee), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                     }
-                    
                     if (!isFree) {
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "₹%.0f".format(mockOriginalPrice),
-                                fontSize = 9.sp,
-                                color = Color.Gray,
-                                textDecoration = TextDecoration.LineThrough
-                            )
-                            Text(
-                                text = "$discountPercent% OFF",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFEF4444)
-                            )
+                            Text(text = "₹%.0f".format(mockOriginalPrice), fontSize = 9.sp, color = Color.Gray, textDecoration = TextDecoration.LineThrough)
+                            Text(text = "$discountPercent% OFF", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
                         }
                     }
                 }
