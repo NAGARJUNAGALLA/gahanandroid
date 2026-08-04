@@ -3,15 +3,17 @@ package com.jcv.mocktests.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info // Changed from Book to Info to fix the compile error
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import com.google.firebase.auth.FirebaseAuth
 
-enum class BottomTab { STUDY_MATERIAL, TESTS, VIDEOS }
+enum class BottomTab { HOME, MY_TESTS, PROFILE }
 
 @Composable
 fun MainDashboardScreen(
@@ -22,9 +24,9 @@ fun MainDashboardScreen(
     var selectedTab by remember(initialTab) {
         mutableStateOf(
             when (initialTab) {
-                "tests" -> BottomTab.TESTS
-                "videos" -> BottomTab.VIDEOS
-                else -> BottomTab.STUDY_MATERIAL
+                "my_tests" -> BottomTab.MY_TESTS
+                "profile" -> BottomTab.PROFILE
+                else -> BottomTab.HOME
             }
         )
     }
@@ -33,57 +35,70 @@ fun MainDashboardScreen(
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
-                
+            NavigationBar(
+                containerColor = Color.White,
+                contentColor = Color(0xFF1E293B),
+                tonalElevation = 8.dp
+            ) {
+                // 1. HOME (Store Front)
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Info, contentDescription = "Study Material") },
-                    label = { Text("Study") },
-                    selected = selectedTab == BottomTab.STUDY_MATERIAL,
-                    onClick = { selectedTab = BottomTab.STUDY_MATERIAL }
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                    label = { Text("Home", fontWeight = FontWeight.SemiBold) },
+                    selected = selectedTab == BottomTab.HOME,
+                    onClick = { selectedTab = BottomTab.HOME },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color(0xFF1E90FF),
+                        selectedTextColor = Color(0xFF1E90FF),
+                        indicatorColor = Color(0xFFEFF6FF)
+                    )
                 )
                 
+                // 2. MY TESTS (Purchased / Attempted - Protected)
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.List, contentDescription = "Tests") },
-                    label = { Text("Tests") },
-                    selected = selectedTab == BottomTab.TESTS,
+                    icon = { Icon(Icons.Default.List, contentDescription = "My Tests") },
+                    label = { Text("My Tests", fontWeight = FontWeight.SemiBold) },
+                    selected = selectedTab == BottomTab.MY_TESTS,
                     onClick = {
                         if (auth.currentUser == null) {
                             onNavigateToLogin()
                         } else {
-                            selectedTab = BottomTab.TESTS
+                            selectedTab = BottomTab.MY_TESTS
                         }
                     }
                 )
                 
+                // 3. PROFILE (Settings / Account - Protected)
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Videos") },
-                    label = { Text("Videos") },
-                    selected = selectedTab == BottomTab.VIDEOS,
-                    onClick = { selectedTab = BottomTab.VIDEOS }
+                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
+                    label = { Text("Profile", fontWeight = FontWeight.SemiBold) },
+                    selected = selectedTab == BottomTab.PROFILE,
+                    onClick = {
+                        if (auth.currentUser == null) {
+                            onNavigateToLogin()
+                        } else {
+                            selectedTab = BottomTab.PROFILE
+                        }
+                    }
                 )
             }
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             when (selectedTab) {
-                BottomTab.STUDY_MATERIAL -> {
-                    StudyMaterialScreen(
-                        url = "https://jcv-mock-tests.web.app/studymaterial.html", 
-                        onNavigateBack = {} 
-                    )
+                BottomTab.HOME -> {
+                    HomeScreen(onNavigateToCourse = onNavigateToCourse)
                 }
-                BottomTab.TESTS -> {
-                    // Passes the required parameter to fix line 85 error
-                    HomeScreen(
-                        onNavigateToCourse = onNavigateToCourse,
-                        onNavigateToStudyMaterial = { selectedTab = BottomTab.STUDY_MATERIAL }
-                    )
+                BottomTab.MY_TESTS -> {
+                    // TODO: Replace with your actual My Tests / Purchased view
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        Text("Your Purchased Test Series will appear here.")
+                    }
                 }
-                BottomTab.VIDEOS -> {
-                    StudyMaterialScreen(
-                        url = "https://jcv-mock-tests.web.app/videos.html", 
-                        onNavigateBack = {} 
-                    )
+                BottomTab.PROFILE -> {
+                    // TODO: Replace with your actual Profile / Settings view
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        Text("Profile & Settings")
+                    }
                 }
             }
         }
