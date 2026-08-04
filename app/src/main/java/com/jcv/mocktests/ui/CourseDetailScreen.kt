@@ -19,6 +19,7 @@ fun CourseDetailScreen(
     courseId: String,
     // Updated signature to match the Navigation requirements
     onNavigateToExam: (courseId: String, testName: String, isReviewMode: Boolean) -> Unit,
+    onNavigateToStudyMaterial: () -> Unit, // <-- ADD THIS NEW PARAMETER
     onNavigateBack: () -> Unit
 ) {
     // Initialize Context and LocalStorage
@@ -73,6 +74,14 @@ fun CourseDetailScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Comprehensive mock tests designed to help you prepare and excel.")
                     Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onNavigateToStudyMaterial, 
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("View Study Material")
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth()) {
                         Text("Go to Content")
                     }
