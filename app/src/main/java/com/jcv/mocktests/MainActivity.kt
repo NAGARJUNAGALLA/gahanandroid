@@ -58,6 +58,17 @@ fun MockTestsApp() {
                     // Append isReviewMode to the navigation route
                     navController.navigate("exam/$cId/$encodedTestName/$isReviewMode") 
                 },
+                // NEW: Added navigation to Study Material here
+                onNavigateToStudyMaterial = { navController.navigate("study_material") },
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
+        // NEW ROUTE: Study Material Web App
+        composable("study_material") {
+            StudyMaterialScreen(
+                // Replace this URL with your actual live web app link
+                url = "https://your-web-app-link.com/maths-notes", 
                 onNavigateBack = { navController.popBackStack() }
             )
         }
