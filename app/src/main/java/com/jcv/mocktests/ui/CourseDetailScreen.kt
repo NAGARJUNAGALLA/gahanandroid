@@ -8,16 +8,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.jcv.mocktests.utils.LocalStorage // Make sure this matches your package
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseDetailScreen(
     courseId: String,
-    onNavigateToExam: (String) -> Unit,
+    // Updated signature to match the Navigation requirements
+    onNavigateToExam: (courseId: String, testName: String, isReviewMode: Boolean) -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    // Initialize Context and LocalStorage
+    val context = LocalContext.current
+    val localStorage = remember { LocalStorage(context) }
+    
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT")
     
@@ -79,18 +86,35 @@ fun CourseDetailScreen(
                     } else {
                         LazyColumn(modifier = Modifier.padding(16.dp).fillMaxSize()) {
                             items(testNames) { testName ->
+                                // Check if attempted for UI display purposes
+                                val alreadyAttempted = localStorage.isTestAttempted(courseId, testName)
+                                
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 8.dp)
-                                        .clickable { onNavigateToExam(testName) }
+                                        .clickable { 
+                                            // Check state and navigate with the boolean flag
+                                            onNavigateToExam(courseId, testName, alreadyAttempted) 
+                                        }
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(16.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(testName, style = MaterialTheme.typography.bodyLarge)
-                                        Text(">")
+                                        
+                                        // Update UI indicator based on local storage
+                                        if (alreadyAttempted) {
+                                            Text(
+                                                "Review", 
+                                                color = MaterialTheme.colorScheme.primary,
+                                                style = MaterialTheme.typography.labelLarge
+                                            )
+                                        } else {
+                                            Text(">")
+                                        }
                                     }
                                 }
                             }
