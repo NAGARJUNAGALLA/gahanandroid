@@ -68,7 +68,7 @@ fun MockTestsApp() {
         composable("study_material") {
             StudyMaterialScreen(
                 // Replace this URL with your actual live web app link
-                url = "https://your-web-app-link.com/maths-notes", 
+                url = "https://jcv-mock-tests.web.app/studymaterial.html", 
                 onNavigateBack = { navController.popBackStack() }
             )
         }
