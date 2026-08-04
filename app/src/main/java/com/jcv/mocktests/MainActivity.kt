@@ -9,7 +9,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.google.firebase.auth.FirebaseAuth
 import com.jcv.mocktests.ui.*
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -26,54 +25,65 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MockTestsApp() {
     val navController = rememberNavController()
-    val auth = FirebaseAuth.getInstance()
-    val startDestination = if (auth.currentUser != null) "home" else "login"
+    
+    // CHANGE: Always start at the dashboard, default to study_material
+    val startDestination = "main_dashboard/study_material"
 
     NavHost(navController = navController, startDestination = startDestination) {
+        
+        // NEW: Dashboard Route handling tabs
+        composable(
+            route = "main_dashboard/{tab}",
+            arguments = listOf(navArgument("tab") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val tab = backStackEntry.arguments?.getString("tab") ?: "study_material"
+            
+            MainDashboardScreen(
+                initialTab = tab,
+                onNavigateToCourse = { courseId -> navController.navigate("course_details/$courseId") },
+                onNavigateToLogin = { navController.navigate("login") }
+            )
+        }
+
         composable("login") {
             AuthScreen(
-                onNavigateToHome = { navController.navigate("home") { popUpTo("login") { inclusive = true } } },
+                // CHANGE: After successful login, route back to the Dashboard on the "tests" tab
+                onNavigateToHome = { 
+                    navController.navigate("main_dashboard/tests") { 
+                        popUpTo(0) // Clear the backstack so they don't hit the login screen again by pressing back
+                    } 
+                },
                 onNavigateToSignup = { navController.navigate("signup") }
             )
         }
+        
         composable("signup") {
             SignupScreen(
-                onNavigateToHome = { navController.navigate("home") { popUpTo("signup") { inclusive = true } } },
-                onNavigateToLogin = { navController.navigate("login") { popUpTo("signup") { inclusive = true } } }
+                onNavigateToHome = { 
+                    navController.navigate("main_dashboard/tests") { popUpTo(0) } 
+                },
+                onNavigateToLogin = { 
+                    navController.navigate("login") { popUpTo("signup") { inclusive = true } } 
+                }
             )
         }
-        composable("home") {
-            HomeScreen(
-                onNavigateToCourse = { courseId -> navController.navigate("course_details/$courseId") }
-            )
-        }
+        
         composable("course_details/{courseId}") { backStackEntry ->
             val courseId = backStackEntry.arguments?.getString("courseId") ?: ""
             CourseDetailScreen(
                 courseId = courseId,
-                // Updated lambda to accept courseId, testName, and isReviewMode
                 onNavigateToExam = { cId, testName, isReviewMode -> 
-                    // URL encode the test name just in case it has spaces
                     val encodedTestName = URLEncoder.encode(testName, "UTF-8")
-                    // Append isReviewMode to the navigation route
                     navController.navigate("exam/$cId/$encodedTestName/$isReviewMode") 
                 },
-                // NEW: Added navigation to Study Material here
-                onNavigateToStudyMaterial = { navController.navigate("study_material") },
+                // CHANGE: Route to the study material tab in the dashboard
+                onNavigateToStudyMaterial = { 
+                    navController.navigate("main_dashboard/study_material") { popUpTo(0) }
+                },
                 onNavigateBack = { navController.popBackStack() }
             )
         }
         
-        // NEW ROUTE: Study Material Web App
-        composable("study_material") {
-            StudyMaterialScreen(
-                // Replace this URL with your actual live web app link
-                url = "https://jcv-mock-tests.web.app/studymaterial.html", 
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        
-        // Updated route to accept courseId, testName, and isReviewMode
         composable(
             route = "exam/{courseId}/{testName}/{isReviewMode}",
             arguments = listOf(
@@ -91,17 +101,22 @@ fun MockTestsApp() {
                 testName = testName,
                 isReviewMode = isReviewMode,
                 onFinalSubmit = { score, total -> 
-                    navController.navigate("results/$score/$total") { popUpTo("home") }
+                    navController.navigate("results/$score/$total") { 
+                        popUpTo("main_dashboard/tests") 
+                    }
                 }
             )
         }
+        
         composable("results/{score}/{total}") { backStackEntry ->
             val score = backStackEntry.arguments?.getString("score")?.toInt() ?: 0
             val total = backStackEntry.arguments?.getString("total")?.toInt() ?: 0
             ResultScreen(
                 score = score,
                 totalQuestions = total,
-                onNavigateHome = { navController.navigate("home") { popUpTo("home") { inclusive = true } } }
+                onNavigateHome = { 
+                    navController.navigate("main_dashboard/tests") { popUpTo(0) } 
+                }
             )
         }
     }
