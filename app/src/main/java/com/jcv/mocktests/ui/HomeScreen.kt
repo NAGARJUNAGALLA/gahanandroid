@@ -12,14 +12,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info // Changed from Book to Info to fix compile error
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -28,19 +29,19 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.models.Course
 import java.util.Locale
 
-val JcvBlue = Color(0xFF1E90FF)
-val DarkGradient = Brush.linearGradient(listOf(Color(0xFF0F172A), Color(0xFF1E3A8A)))
+val JcvBlue = Color(0xFF2563EB) // Modern coaching app primary blue
+val SurfaceGray = Color(0xFFF8FAFC)
+val SuccessGreen = Color(0xFF16A34A)
+val CardGradient = Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF3B82F6)))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onNavigateToCourse: (String) -> Unit,
-    onNavigateToStudyMaterial: () -> Unit // Fixed parameter mismatch
+    onNavigateToCourse: (String) -> Unit
 ) {
     var courses by remember { mutableStateOf<List<Course>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -56,15 +57,15 @@ fun HomeScreen(
                 if (document.exists()) {
                     val testsList = document.get("tests") as? List<Map<String, Any>> ?: emptyList()
                     val fetchedCourses = testsList.map { map ->
-                        val title = map["title"] as? String ?: "JCV Course"
+                        val title = map["title"] as? String ?: "JCV Test Series"
                         val titleUpper = title.uppercase(Locale.getDefault())
                         
                         val topic = when {
                             titleUpper.contains("GROUP") -> "GROUP EXAMS"
                             titleUpper.contains("CURRENT") -> "CURRENT AFFAIRS"
-                            titleUpper.contains("IIT") || titleUpper.contains("CONSTABLE") -> "IIT"
+                            titleUpper.contains("IIT") || titleUpper.contains("CONSTABLE") -> "IIT & POLICE"
                             titleUpper.contains("TET") || titleUpper.contains("DSC") -> "TET & DSC"
-                            else -> "OTHERS"
+                            else -> "GENERAL"
                         }
 
                         Course(
@@ -77,7 +78,7 @@ fun HomeScreen(
                     }
                     courses = fetchedCourses
                 } else {
-                    errorMessage = "No courses available at the moment."
+                    errorMessage = "No test series available at the moment."
                 }
                 isLoading = false
             }
@@ -103,11 +104,16 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("JCV MOCK TESTS", fontWeight = FontWeight.Black, color = Color.White) },
+                title = { 
+                    Column {
+                        Text("Hi, Aspirant \uD83D\uDC4B", fontSize = 14.sp, color = Color.LightGray)
+                        Text("What are you preparing for?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = JcvBlue),
                 actions = {
-                    IconButton(onClick = { FirebaseAuth.getInstance().signOut() }) {
-                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color.White)
+                    IconButton(onClick = { /* TODO: Notifications */ }) {
+                        Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = Color.White)
                     }
                 }
             )
@@ -117,82 +123,108 @@ fun HomeScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(Color(0xFFF8FAFC))
-                .padding(16.dp)
+                .background(SurfaceGray)
         ) {
-            
-            Button(
-                onClick = onNavigateToStudyMaterial,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF491569)),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Icon(Icons.Default.Info, contentDescription = "Study Material", tint = Color.White)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("View Study Material Notes", fontWeight = FontWeight.Bold, color = Color.White)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
+            // Top Section (Blue Background extension with Search)
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.White, RoundedCornerShape(8.dp))
-                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .background(JcvBlue)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                BasicTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    textStyle = TextStyle(fontSize = 14.sp, color = Color.DarkGray),
-                    modifier = Modifier.weight(1f),
-                    decorationBox = { innerTextField ->
-                        if (searchQuery.isEmpty()) {
-                            Text("Search for a course...", color = Color.Gray, fontSize = 14.sp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        textStyle = TextStyle(fontSize = 15.sp, color = Color.DarkGray),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            if (searchQuery.isEmpty()) {
+                                Text("Search for test series...", color = Color.Gray, fontSize = 15.sp)
+                            }
+                            innerTextField()
                         }
-                        innerTextField()
-                    }
-                )
+                    )
+                }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
 
-            Text("FILTER BY TOPICS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(allTopics) { topic ->
-                    val isActive = topic == activeTopic
-                    val count = when (topic) {
-                        "ALL" -> courses.size
-                        "FREE" -> courses.count { it.fee == 0.0 }
-                        else -> courses.count { it.topic == topic }
-                    }
-                    
+            // Promotional Banners (Classplus style)
+            Spacer(modifier = Modifier.height(16.dp))
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(3) { // Dummy banners
                     Box(
                         modifier = Modifier
-                            .background(if (isActive) Color(0xFFEFF6FF) else Color.White, RoundedCornerShape(4.dp))
-                            .border(1.dp, if (isActive) JcvBlue else Color(0xFFE2E8F0), RoundedCornerShape(4.dp))
+                            .width(280.dp)
+                            .height(120.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF4F46E5), Color(0xFF7C3AED))))
+                            .padding(16.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
+                            Text("Mega Mock Test Challenge", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Attempt live & check all-India rank", color = Color.White, fontSize = 12.sp, opacity = 0.9f)
+                        }
+                    }
+                }
+            }
+
+            // Categories Section
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = "Explore Categories", 
+                fontSize = 16.sp, 
+                fontWeight = FontWeight.Bold, 
+                color = Color(0xFF1E293B),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(allTopics) { topic ->
+                    val isActive = topic == activeTopic
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (isActive) Color(0xFFDBEAFE) else Color.White)
+                            .border(1.dp, if (isActive) JcvBlue else Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
                             .clickable { activeTopic = topic }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
                         Text(
-                            text = "$topic ($count)",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = topic,
+                            fontSize = 13.sp,
+                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
                             color = if (isActive) JcvBlue else Color.DarkGray
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("COURSES (${filteredCourses.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(8.dp))
+            // Test Series Grid
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = "Recommended Test Series", 
+                fontSize = 16.sp, 
+                fontWeight = FontWeight.Bold, 
+                color = Color(0xFF1E293B),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -200,17 +232,18 @@ fun HomeScreen(
                 }
             } else if (filteredCourses.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No courses found matching your criteria.", color = Color.Gray, fontSize = 14.sp)
+                    Text("No test series found.", color = Color.Gray, fontSize = 14.sp)
                 }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(filteredCourses) { course ->
-                        CourseCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
+                        TestSeriesCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
                     }
                 }
             }
@@ -219,61 +252,98 @@ fun HomeScreen(
 }
 
 @Composable
-fun CourseCard(course: Course, onClick: () -> Unit) {
+fun TestSeriesCard(course: Course, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
-    val mockOriginalPrice = if (isFree) 0.0 else course.fee * 2.0
+    val mockOriginalPrice = if (isFree) 0.0 else course.fee * 1.5
     val discountPercent = if (!isFree) (((mockOriginalPrice - course.fee) / mockOriginalPrice) * 100).toInt() else 0
-    val mockLikes = remember { (100..999).random() }
+    val dummyTestCount = remember { (20..150).random() } // Dummy data for presentation
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .shadow(4.dp, RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column {
+            // Header Image / Gradient Area
             Box(
-                modifier = Modifier.fillMaxWidth().aspectRatio(1.6f).background(DarkGradient)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .background(CardGradient)
+                    .padding(8.dp)
             ) {
+                // "Test Series" Tag
+                Box(
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("TEST SERIES", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                // Content mapped over gradient
                 Column(
                     modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = Arrangement.Bottom,
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    Text(text = "JCV MOCK TESTS", color = Color(0xFFFACC15), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(modifier = Modifier.background(Color(0xFFEF4444), RoundedCornerShape(2.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                        Text(text = course.title.take(20).uppercase(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = "FULL COURSE", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.Black)
+                    Text(
+                        text = course.title,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(text = course.title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.DarkGray, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(32.dp))
-                
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.background(Color(0xFFF9FAFB), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
-                        Icon(Icons.Default.ThumbUp, contentDescription = "Likes", tint = Color(0xFFEF4444), modifier = Modifier.size(10.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(mockLikes.toString(), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
-                    }
+            // Details Area
+            Column(modifier = Modifier.padding(12.dp)) {
+                // Stats Row
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("4.8  •  $dummyTestCount+ Tests", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                 }
                 
-                Spacer(modifier = Modifier.height(8.dp))
-                Divider(color = Color(0xFFE2E8F0), thickness = 1.dp)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                // Pricing Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
                     Column {
-                        if (!isFree) Text("₹", fontSize = 9.sp, color = Color.Gray)
-                        Text(text = if (isFree) "Free" else "%.0f".format(course.fee), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        if (!isFree) {
+                            Text(
+                                text = "₹%.0f".format(mockOriginalPrice),
+                                fontSize = 10.sp,
+                                color = Color.Gray,
+                                textDecoration = TextDecoration.LineThrough
+                            )
+                        }
+                        Text(
+                            text = if (isFree) "FREE" else "₹%.0f".format(course.fee),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF1E293B)
+                        )
                     }
+                    
                     if (!isFree) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(text = "₹%.0f".format(mockOriginalPrice), fontSize = 9.sp, color = Color.Gray, textDecoration = TextDecoration.LineThrough)
-                            Text(text = "$discountPercent% OFF", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFDCFCE7), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Text("$discountPercent% OFF", color = SuccessGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
