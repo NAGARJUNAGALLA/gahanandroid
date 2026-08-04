@@ -1,31 +1,26 @@
 package com.jcv.mocktests.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,21 +28,25 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.models.Course
 import java.util.Locale
 
-val JcvBlue = Color(0xFF2563EB) 
-val SurfaceGray = Color(0xFFF8FAFC)
-val SuccessGreen = Color(0xFF16A34A)
-val CardGradient = Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF3B82F6)))
+// Byju's Style Color Palette
+val ByjusPurple = Color(0xFF6D28D9)
+val ByjusGradient = Brush.verticalGradient(listOf(Color(0xFF8B5CF6), Color(0xFF6D28D9)))
+val AppBackground = Color(0xFFF4F6F8)
 
-@OptIn(ExperimentalMaterial3Api::class)
+val SubjectColors = listOf(
+    Color(0xFFFF7E67), // Coral / Orange
+    Color(0xFF42A5F5), // Blue
+    Color(0xFF66BB6A), // Green
+    Color(0xFFAB47BC), // Purple
+    Color(0xFFFFA726)  // Yellow-Orange
+)
+
 @Composable
-fun HomeScreen(
-    onNavigateToCourse: (String) -> Unit
-) {
+fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
     var courses by remember { mutableStateOf<List<Course>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     
-    var searchQuery by remember { mutableStateOf("") }
     var activeTopic by remember { mutableStateOf("ALL") }
 
     LaunchedEffect(Unit) {
@@ -56,7 +55,7 @@ fun HomeScreen(
             .addOnSuccessListener { document ->
                 if (document.exists()) {
                     val testsList = document.get("tests") as? List<Map<String, Any>> ?: emptyList()
-                    val fetchedCourses = testsList.map { map ->
+                    courses = testsList.map { map ->
                         val title = map["title"] as? String ?: "JCV Test Series"
                         val titleUpper = title.uppercase(Locale.getDefault())
                         
@@ -76,9 +75,8 @@ fun HomeScreen(
                             topic = topic
                         )
                     }
-                    courses = fetchedCourses
                 } else {
-                    errorMessage = "No test series available at the moment."
+                    errorMessage = "No test series available."
                 }
                 isLoading = false
             }
@@ -88,160 +86,102 @@ fun HomeScreen(
             }
     }
 
-    val filteredCourses = courses.filter { course ->
-        val matchesTopic = when (activeTopic) {
-            "ALL" -> true
-            "FREE" -> course.fee == 0.0
-            else -> course.topic == activeTopic
-        }
-        val matchesSearch = course.title.contains(searchQuery, ignoreCase = true)
-        matchesTopic && matchesSearch
+    val filteredCourses = courses.filter { 
+        if (activeTopic == "ALL") true else it.topic == activeTopic 
     }
 
     val dynamicTopics = courses.map { it.topic }.distinct()
-    val allTopics = listOf("ALL", "FREE") + dynamicTopics
+    val allTopics = listOf("ALL") + dynamicTopics
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Column {
-                        Text("Hi, Aspirant \uD83D\uDC4B", fontSize = 14.sp, color = Color.LightGray)
-                        Text("What are you preparing for?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = JcvBlue),
-                actions = {
-                    IconButton(onClick = { /* TODO: Notifications */ }) {
-                        Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = Color.White)
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppBackground)
+    ) {
+        // 1. Byju's Style Curved Header
+        Box(
             modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .background(SurfaceGray)
+                .fillMaxWidth()
+                .background(
+                    ByjusGradient,
+                    shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+                )
+                .padding(top = 56.dp, bottom = 32.dp, start = 24.dp, end = 24.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(JcvBlue)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
+                Column {
+                    Text("Hello, Scholar \uD83D\uDC4B", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Ready to learn something new?", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                }
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.White, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .size(50.dp)
+                        .background(Color.White, CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        textStyle = TextStyle(fontSize = 15.sp, color = Color.DarkGray),
-                        modifier = Modifier.weight(1f),
-                        decorationBox = { innerTextField ->
-                            if (searchQuery.isEmpty()) {
-                                Text("Search for test series...", color = Color.Gray, fontSize = 15.sp)
-                            }
-                            innerTextField()
-                        }
-                    )
+                    Icon(Icons.Default.Person, contentDescription = "Profile", tint = ByjusPurple, modifier = Modifier.size(28.dp))
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 2. Vibrant Gamified Subject Tiles
+        Text(
+            text = "Pick a Subject", 
+            fontSize = 18.sp, 
+            fontWeight = FontWeight.Bold, 
+            color = Color(0xFF1E293B),
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            itemsIndexed(allTopics) { index, topic ->
+                ByjusSubjectCard(
+                    topic = topic,
+                    index = index,
+                    isSelected = topic == activeTopic,
+                    onClick = { activeTopic = topic }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // 3. Recommended / Main Content
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Recommended Tests", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+            Text("View All", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ByjusPurple)
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = ByjusPurple)
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(1), // Changed to single column for larger, friendly cards
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(3) { 
-                    Box(
-                        modifier = Modifier
-                            .width(280.dp)
-                            .height(120.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFF4F46E5), Color(0xFF7C3AED))))
-                            .padding(16.dp)
-                    ) {
-                        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
-                            Text("Mega Mock Test Challenge", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            // Fix: Replaced invalid `opacity = 0.9f` with `Color.White.copy(alpha = 0.9f)`
-                            Text("Attempt live & check all-India rank", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "Explore Categories", 
-                fontSize = 16.sp, 
-                fontWeight = FontWeight.Bold, 
-                color = Color(0xFF1E293B),
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(allTopics) { topic ->
-                    val isActive = topic == activeTopic
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (isActive) Color(0xFFDBEAFE) else Color.White)
-                            .border(1.dp, if (isActive) JcvBlue else Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
-                            .clickable { activeTopic = topic }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = topic,
-                            fontSize = 13.sp,
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isActive) JcvBlue else Color.DarkGray
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "Recommended Test Series", 
-                fontSize = 16.sp, 
-                fontWeight = FontWeight.Bold, 
-                color = Color(0xFF1E293B),
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = JcvBlue)
-                }
-            } else if (filteredCourses.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No test series found.", color = Color.Gray, fontSize = 14.sp)
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredCourses) { course ->
-                        TestSeriesCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
-                    }
+                items(filteredCourses) { course ->
+                    ByjusCourseCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
                 }
             }
         }
@@ -249,95 +189,104 @@ fun HomeScreen(
 }
 
 @Composable
-fun TestSeriesCard(course: Course, onClick: () -> Unit) {
+fun ByjusSubjectCard(topic: String, index: Int, isSelected: Boolean, onClick: () -> Unit) {
+    val baseColor = SubjectColors[index % SubjectColors.size]
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .background(
+                    if (isSelected) baseColor else baseColor.copy(alpha = 0.15f), 
+                    RoundedCornerShape(20.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            // Displays the first letter of the topic as a large icon
+            Text(
+                text = topic.take(1).uppercase(), 
+                fontSize = 28.sp, 
+                fontWeight = FontWeight.Black, 
+                color = if (isSelected) Color.White else baseColor
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = topic.lowercase().replaceFirstChar { it.uppercase() }, 
+            fontSize = 13.sp, 
+            fontWeight = FontWeight.Bold, 
+            color = if (isSelected) ByjusPurple else Color.Gray
+        )
+    }
+}
+
+@Composable
+fun ByjusCourseCard(course: Course, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
-    val mockOriginalPrice = if (isFree) 0.0 else course.fee * 1.5
-    val discountPercent = if (!isFree) (((mockOriginalPrice - course.fee) / mockOriginalPrice) * 100).toInt() else 0
-    val dummyTestCount = remember { (20..150).random() } 
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .shadow(4.dp, RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp), // Softer, rounder corners
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left Side: Play Icon Block
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(90.dp)
-                    .background(CardGradient)
-                    .padding(8.dp)
+                    .size(60.dp)
+                    .background(Color(0xFFF3E8FF), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text("TEST SERIES", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                }
-                
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Bottom,
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Text(
-                        text = course.title,
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = ByjusPurple, modifier = Modifier.size(32.dp))
             }
 
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("4.8  •  $dummyTestCount+ Tests", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
-                Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Column {
-                        if (!isFree) {
-                            Text(
-                                text = "₹%.0f".format(mockOriginalPrice),
-                                fontSize = 10.sp,
-                                color = Color.Gray,
-                                textDecoration = TextDecoration.LineThrough
-                            )
-                        }
-                        Text(
-                            text = if (isFree) "FREE" else "₹%.0f".format(course.fee),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF1E293B)
-                        )
-                    }
-                    
-                    if (!isFree) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFFDCFCE7), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            Text("$discountPercent% OFF", color = SuccessGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
+            // Middle: Text Info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = course.title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E293B),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = course.topic,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Gray
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Right Side: Price Chip
+            Box(
+                modifier = Modifier
+                    .background(
+                        if (isFree) Color(0xFFDCFCE7) else Color(0xFFFFF7ED), 
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = if (isFree) "FREE" else "₹%.0f".format(course.fee),
+                    color = if (isFree) Color(0xFF16A34A) else Color(0xFFEA580C),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black
+                )
             }
         }
     }
