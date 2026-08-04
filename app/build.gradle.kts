@@ -1,3 +1,62 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    // Required for Firebase
+    id("com.google.gms.google-services") 
+}
+
+android {
+    namespace = "com.jcv.mocktests"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.jcv.mocktests"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+    
+    buildFeatures {
+        compose = true
+    }
+    
+    composeOptions {
+        // Matches your Kotlin version 1.9.22
+        kotlinCompilerExtensionVersion = "1.5.8" 
+    }
+    
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
 dependencies {
     // Jetpack Compose & Navigation
     implementation("androidx.core:core-ktx:1.12.0")
