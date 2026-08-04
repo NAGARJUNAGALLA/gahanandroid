@@ -1,6 +1,7 @@
 package com.jcv.mocktests.ui
-import androidx.compose.material.icons.Icons
-import androidx.compose.material3.HorizontalDivider
+
+
+import androidx.compose.material3.Divider
 import androidx.compose.foundation.border
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.Icons.Default.List
@@ -250,7 +251,7 @@ fun TestbookCourseCard(course: Course, onClick: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
+            Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(12.dp))
 
             // Bottom Action Row
