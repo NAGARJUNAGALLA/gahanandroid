@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "1091596924078",
+    "firebase_url": "https://jcv-mock-tests-default-rtdb.firebaseio.com",
+    "project_id": "jcv-mock-tests",
+    "storage_bucket": "jcv-mock-tests.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1091596924078:android:cce012381988204233693f",
+        "android_client_info": {
+          "package_name": "com.jcv.mocktests"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhePLvbgRltKQNtDEKZIHhjxvtJv6-mfM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1091596924078:android:86804e2af3b1410633693f",
+        "android_client_info": {
+          "package_name": "dev.wvb.testapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhePLvbgRltKQNtDEKZIHhjxvtJv6-mfM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
