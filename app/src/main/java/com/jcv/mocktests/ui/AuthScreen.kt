@@ -12,9 +12,10 @@ import com.google.firebase.auth.FirebaseAuth
 @Composable
 fun AuthScreen(
     onNavigateToHome: () -> Unit,
-    onNavigateToSignup: () -> Unit // <-- Added this parameter
+    onNavigateToSignup: () -> Unit
 ) {
-    var email by remember { mutableStateOf("") }
+    // Changed state variable name to be more accurate
+    var identifier by remember { mutableStateOf("") } 
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
@@ -30,9 +31,9 @@ fun AuthScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
+            value = identifier,
+            onValueChange = { identifier = it },
+            label = { Text("Mobile Number or Email") }, // Updated label
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -54,7 +55,16 @@ fun AuthScreen(
         Button(
             onClick = {
                 isLoading = true
-                auth.signInWithEmailAndPassword(email, password)
+                val trimmedIdentifier = identifier.trim()
+                
+                // MIRRORING YOUR WEB APP LOGIC HERE
+                val finalAuthEmail = if (trimmedIdentifier.contains("@")) {
+                    trimmedIdentifier
+                } else {
+                    "$trimmedIdentifier@jcv.com"
+                }
+
+                auth.signInWithEmailAndPassword(finalAuthEmail, password)
                     .addOnCompleteListener { task ->
                         isLoading = false
                         if (task.isSuccessful) {
@@ -73,7 +83,6 @@ fun AuthScreen(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Added button to navigate to Signup
         TextButton(onClick = onNavigateToSignup) {
             Text("Don't have an account? Sign Up")
         }
