@@ -1,5 +1,6 @@
 package com.jcv.mocktests.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,18 +8,19 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.LibraryBooks
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,25 +30,18 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.models.Course
 import java.util.Locale
 
-// Byju's Style Color Palette
-val ByjusPurple = Color(0xFF6D28D9)
-val ByjusGradient = Brush.verticalGradient(listOf(Color(0xFF8B5CF6), Color(0xFF6D28D9)))
-val AppBackground = Color(0xFFF4F6F8)
-
-val SubjectColors = listOf(
-    Color(0xFFFF7E67), // Coral / Orange
-    Color(0xFF42A5F5), // Blue
-    Color(0xFF66BB6A), // Green
-    Color(0xFFAB47BC), // Purple
-    Color(0xFFFFA726)  // Yellow-Orange
-)
+// Testbook Style Color Palette
+val TbNavy = Color(0xFF0F172A) // Dark slate for headers
+val TbBlue = Color(0xFF2563EB) // Primary action blue
+val TbBackground = Color(0xFFF1F5F9) // Light grayish blue background
+val TbYellow = Color(0xFFEAB308) // Warning/Pro color
+val TbGreen = Color(0xFF16A34A) // Success/Free color
 
 @Composable
 fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
     var courses by remember { mutableStateOf<List<Course>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    
     var activeTopic by remember { mutableStateOf("ALL") }
 
     LaunchedEffect(Unit) {
@@ -96,92 +91,108 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppBackground)
+            .background(TbBackground)
     ) {
-        // 1. Byju's Style Curved Header
+        // 1. Testbook Dark Navy Header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    ByjusGradient,
-                    shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
-                )
-                .padding(top = 56.dp, bottom = 32.dp, start = 24.dp, end = 24.dp)
+                .background(TbNavy)
+                .padding(top = 48.dp, bottom = 16.dp, start = 16.dp, end = 16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("Hello, Scholar \uD83D\uDC4B", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("JCV Tests", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Mock Language Selector typical of Testbook
+                    Box(modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text("A/అ", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = Color.White)
+                }
+            }
+        }
+
+        // 2. "Pass Pro" Promotional Banner
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = TbBlue)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = TbYellow, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("JCV PASS PRO", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Ready to learn something new?", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                    Text("Unlock 500+ Mock Tests & PYQs", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
                 }
-                Box(
-                    modifier = Modifier
-                        .size(50.dp)
-                        .background(Color.White, CircleShape),
-                    contentAlignment = Alignment.Center
+                Button(
+                    onClick = { /* Navigate to subscription */ },
+                    colors = ButtonDefaults.buttonColors(containerColor = TbYellow),
+                    shape = RoundedCornerShape(4.dp)
                 ) {
-                    Icon(Icons.Default.Person, contentDescription = "Profile", tint = ByjusPurple, modifier = Modifier.size(28.dp))
+                    Text("View Plans", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 2. Vibrant Gamified Subject Tiles
-        Text(
-            text = "Pick a Subject", 
-            fontSize = 18.sp, 
-            fontWeight = FontWeight.Bold, 
-            color = Color(0xFF1E293B),
-            modifier = Modifier.padding(horizontal = 24.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        
+        // 3. Category Filter Chips (Testbook Style)
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(allTopics) { index, topic ->
-                ByjusSubjectCard(
-                    topic = topic,
-                    index = index,
-                    isSelected = topic == activeTopic,
-                    onClick = { activeTopic = topic }
-                )
+            items(allTopics) { topic ->
+                val isSelected = activeTopic == topic
+                Surface(
+                    modifier = Modifier.clickable { activeTopic = topic },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isSelected) TbBlue.copy(alpha = 0.1f) else Color.White,
+                    border = BorderStroke(1.dp, if (isSelected) TbBlue else Color.LightGray)
+                ) {
+                    Text(
+                        text = topic,
+                        color = if (isSelected) TbBlue else Color.DarkGray,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // 3. Recommended / Main Content
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Recommended Tests", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
-            Text("View All", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ByjusPurple)
-        }
-        
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 4. Test Series Grid
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ByjusPurple)
+                CircularProgressIndicator(color = TbBlue)
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(1), // Changed to single column for larger, friendly cards
-                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                columns = GridCells.Fixed(1),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredCourses) { course ->
-                    ByjusCourseCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
+                    TestbookCourseCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
                 }
             }
         }
@@ -189,104 +200,82 @@ fun HomeScreen(onNavigateToCourse: (String) -> Unit) {
 }
 
 @Composable
-fun ByjusSubjectCard(topic: String, index: Int, isSelected: Boolean, onClick: () -> Unit) {
-    val baseColor = SubjectColors[index % SubjectColors.size]
-    
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .background(
-                    if (isSelected) baseColor else baseColor.copy(alpha = 0.15f), 
-                    RoundedCornerShape(20.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            // Displays the first letter of the topic as a large icon
-            Text(
-                text = topic.take(1).uppercase(), 
-                fontSize = 28.sp, 
-                fontWeight = FontWeight.Black, 
-                color = if (isSelected) Color.White else baseColor
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = topic.lowercase().replaceFirstChar { it.uppercase() }, 
-            fontSize = 13.sp, 
-            fontWeight = FontWeight.Bold, 
-            color = if (isSelected) ByjusPurple else Color.Gray
-        )
-    }
-}
-
-@Composable
-fun ByjusCourseCard(course: Course, onClick: () -> Unit) {
+fun TestbookCourseCard(course: Course, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp), // Softer, rounder corners
+        shape = RoundedCornerShape(8.dp), // Sharper corners for a structural look
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Left Side: Play Icon Block
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .background(Color(0xFFF3E8FF), RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = ByjusPurple, modifier = Modifier.size(32.dp))
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Middle: Text Info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = course.title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E293B),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = course.topic,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.Gray
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Right Side: Price Chip
-            Box(
-                modifier = Modifier
-                    .background(
-                        if (isFree) Color(0xFFDCFCE7) else Color(0xFFFFF7ED), 
-                        RoundedCornerShape(12.dp)
+                // Title & Subtitle
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = course.title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Full Mocks • Sectional Tests • PYQs", // Analytical metadata
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+                
+                // Top Right Icon/Badge
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(TbBlue.copy(alpha = 0.1f), RoundedCornerShape(4.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.LibraryBooks, contentDescription = null, tint = TbBlue)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bottom Action Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (isFree) "FREE" else "₹%.0f".format(course.fee),
-                    color = if (isFree) Color(0xFF16A34A) else Color(0xFFEA580C),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black
-                )
+                Column {
+                    Text("Starts From", fontSize = 10.sp, color = Color.Gray)
+                    Text(
+                        text = if (isFree) "FREE" else "₹%.0f".format(course.fee),
+                        color = if (isFree) TbGreen else Color(0xFF1E293B),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+                
+                Button(
+                    onClick = onClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isFree) TbGreen else TbBlue
+                    ),
+                    shape = RoundedCornerShape(4.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)
+                ) {
+                    Text(if (isFree) "Start Free Test" else "View Series", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
             }
         }
     }
