@@ -4,7 +4,8 @@ data class Course(
     val sheetId: String = "",
     val title: String = "",
     val fee: Double = 0.0,
-    val description: String = ""
+    val description: String = "",
+    var topic: String = "OTHERS" // Used for the filter chips
 )
 
 data class Question(
