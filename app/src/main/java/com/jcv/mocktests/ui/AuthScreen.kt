@@ -10,13 +10,16 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun AuthScreen(onNavigateToHome: () -> Unit) {
+fun AuthScreen(
+    onNavigateToHome: () -> Unit,
+    onNavigateToSignup: () -> Unit // <-- Added this parameter
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    val auth = FirebaseAuth.getInstance() // Firebase Auth integration
+    val auth = FirebaseAuth.getInstance()
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -29,7 +32,7 @@ fun AuthScreen(onNavigateToHome: () -> Unit) {
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email or Username") },
+            label = { Text("Email") },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -66,6 +69,13 @@ fun AuthScreen(onNavigateToHome: () -> Unit) {
         ) {
             if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
             else Text("Log in")
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Added button to navigate to Signup
+        TextButton(onClick = onNavigateToSignup) {
+            Text("Don't have an account? Sign Up")
         }
     }
 }
