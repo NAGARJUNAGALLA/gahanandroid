@@ -39,13 +39,11 @@ fun MyPurchasedTestsScreen(
 
         val db = FirebaseFirestore.getInstance()
 
-        // 1. Fetch user's approved registrations from the pending_registrations collection
         db.collection("pending_registrations")
             .whereEqualTo("uid", currentUser.uid)
             .get()
             .addOnSuccessListener { paymentsSnap ->
                 
-                // Filter only approved payments and map their sheetIds
                 val approvedSheetIds = paymentsSnap.documents
                     .filter { it.getString("status") == "approved" }
                     .mapNotNull { it.getString("sheetId") }
@@ -55,7 +53,6 @@ fun MyPurchasedTestsScreen(
                     return@addOnSuccessListener
                 }
 
-                // 2. Fetch the main test list and cross-reference with approved sheetIds
                 db.collection("exams").document("testList").get()
                     .addOnSuccessListener { examsDoc ->
                         if (examsDoc.exists()) {
@@ -63,7 +60,6 @@ fun MyPurchasedTestsScreen(
                             val fetchedCourses = testsList.mapNotNull { map ->
                                 val sheetId = map["sheetId"] as? String ?: return@mapNotNull null
                                 
-                                // Only include if the sheetId is in the user's approved list
                                 if (approvedSheetIds.contains(sheetId)) {
                                     val title = map["title"] as? String ?: "JCV Test Series"
                                     val titleUpper = title.uppercase(Locale.getDefault())
@@ -104,7 +100,8 @@ fun MyPurchasedTestsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("My Learning", fontWeight = FontWeight.ExtraBold, color = Color.White) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ByjusPurple) 
+                // Using the dark Navy Testbook style for the header
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TbNavy) 
             )
         }
     ) { padding ->
@@ -112,11 +109,11 @@ fun MyPurchasedTestsScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(AppBackground)
+                .background(TbBackground) // Using the Testbook light gray-blue background
         ) {
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ByjusPurple)
+                    CircularProgressIndicator(color = TbBlue) // Changed to Testbook Blue
                 }
             } else if (errorMessage != null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -133,12 +130,13 @@ fun MyPurchasedTestsScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(1), 
-                    contentPadding = PaddingValues(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(purchasedCourses) { course ->
-                        ByjusCourseCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
+                        // Using the new Testbook style card
+                        TestbookCourseCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
                     }
                 }
             }
