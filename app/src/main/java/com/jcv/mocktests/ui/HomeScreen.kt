@@ -33,7 +33,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.models.Course
 import java.util.Locale
 
-val JcvBlue = Color(0xFF2563EB) // Modern coaching app primary blue
+val JcvBlue = Color(0xFF2563EB) 
 val SurfaceGray = Color(0xFFF8FAFC)
 val SuccessGreen = Color(0xFF16A34A)
 val CardGradient = Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF3B82F6)))
@@ -125,7 +125,6 @@ fun HomeScreen(
                 .fillMaxSize()
                 .background(SurfaceGray)
         ) {
-            // Top Section (Blue Background extension with Search)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -156,13 +155,12 @@ fun HomeScreen(
                 }
             }
 
-            // Promotional Banners (Classplus style)
             Spacer(modifier = Modifier.height(16.dp))
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(3) { // Dummy banners
+                items(3) { 
                     Box(
                         modifier = Modifier
                             .width(280.dp)
@@ -174,13 +172,13 @@ fun HomeScreen(
                         Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
                             Text("Mega Mock Test Challenge", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Attempt live & check all-India rank", color = Color.White, fontSize = 12.sp, opacity = 0.9f)
+                            // Fix: Replaced invalid `opacity = 0.9f` with `Color.White.copy(alpha = 0.9f)`
+                            Text("Attempt live & check all-India rank", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
                         }
                     }
                 }
             }
 
-            // Categories Section
             Spacer(modifier = Modifier.height(20.dp))
             Text(
                 text = "Explore Categories", 
@@ -215,7 +213,6 @@ fun HomeScreen(
                 }
             }
 
-            // Test Series Grid
             Spacer(modifier = Modifier.height(20.dp))
             Text(
                 text = "Recommended Test Series", 
@@ -256,7 +253,7 @@ fun TestSeriesCard(course: Course, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
     val mockOriginalPrice = if (isFree) 0.0 else course.fee * 1.5
     val discountPercent = if (!isFree) (((mockOriginalPrice - course.fee) / mockOriginalPrice) * 100).toInt() else 0
-    val dummyTestCount = remember { (20..150).random() } // Dummy data for presentation
+    val dummyTestCount = remember { (20..150).random() } 
 
     Card(
         modifier = Modifier
@@ -267,7 +264,6 @@ fun TestSeriesCard(course: Course, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column {
-            // Header Image / Gradient Area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -275,7 +271,6 @@ fun TestSeriesCard(course: Course, onClick: () -> Unit) {
                     .background(CardGradient)
                     .padding(8.dp)
             ) {
-                // "Test Series" Tag
                 Box(
                     modifier = Modifier
                         .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
@@ -284,7 +279,6 @@ fun TestSeriesCard(course: Course, onClick: () -> Unit) {
                     Text("TEST SERIES", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
                 
-                // Content mapped over gradient
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Bottom,
@@ -301,9 +295,7 @@ fun TestSeriesCard(course: Course, onClick: () -> Unit) {
                 }
             }
 
-            // Details Area
             Column(modifier = Modifier.padding(12.dp)) {
-                // Stats Row
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(12.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -314,7 +306,6 @@ fun TestSeriesCard(course: Course, onClick: () -> Unit) {
                 Divider(color = Color(0xFFF1F5F9), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Pricing Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
