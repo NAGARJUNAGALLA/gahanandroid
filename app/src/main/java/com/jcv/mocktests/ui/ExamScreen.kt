@@ -7,21 +7,71 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.models.Question
 import com.jcv.mocktests.models.QuestionState
 import com.jcv.mocktests.models.QuestionStatus
 import kotlinx.coroutines.delay
 
 @Composable
-fun ExamScreen(onFinalSubmit: (Int, Int) -> Unit) { // <-- Now accepts Int, Int for Score/Total
-    val questions = listOf(
-        Question(1, "What is the capital of India?", listOf("Delhi", "Mumbai", "Chennai", "Kolkata"), 0),
-        Question(2, "29 - 6 = ?", listOf("21", "22", "23", "24"), 2)
-    )
-
+fun ExamScreen(
+    courseId: String, 
+    testName: String, 
+    onFinalSubmit: (Int, Int) -> Unit
+) {
+    var questions by remember { mutableStateOf<List<Question>>(emptyList()) }
+    val questionStates = remember { mutableStateListOf<QuestionState>() }
+    
     var currentQIndex by remember { mutableStateOf(0) }
-    val questionStates = remember { mutableStateListOf(*Array(questions.size) { QuestionState() }) }
     var timeLeft by remember { mutableIntStateOf(3600) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Fetch Questions
+    LaunchedEffect(courseId, testName) {
+        val db = FirebaseFirestore.getInstance()
+        db.collection("pro_course_questions").document(courseId).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    val data = doc.data
+                    val testsMap = data?.get("tests") as? Map<String, Any>
+                    
+                    // Navigate down to: tests -> [Test Name] -> [Section Name] -> Array of Questions
+                    val specificTest = testsMap?.get(testName) as? Map<String, List<Map<String, Any>>>
+                    
+                    val parsedQuestions = mutableListOf<Question>()
+                    
+                    specificTest?.values?.forEach { sectionQuestions ->
+                        sectionQuestions.forEach { qMap ->
+                            parsedQuestions.add(
+                                Question(
+                                    id = (qMap["id"] as? Number)?.toInt() ?: 0,
+                                    text = qMap["text"] as? String ?: "",
+                                    options = qMap["options"] as? List<String> ?: emptyList(),
+                                    correct = (qMap["correct"] as? Number)?.toInt() ?: 0
+                                )
+                            )
+                        }
+                    }
+                    
+                    questions = parsedQuestions
+                    
+                    // Initialize empty states for each question
+                    questionStates.clear()
+                    questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                    
+                    // Set timer based on question count (1 minute per question as per web app logic)
+                    timeLeft = parsedQuestions.size * 60 
+                } else {
+                    errorMessage = "Test data not found."
+                }
+                isLoading = false
+            }
+            .addOnFailureListener {
+                errorMessage = it.message
+                isLoading = false
+            }
+    }
 
     // Helper function to calculate score and submit
     fun submitExam() {
@@ -34,22 +84,40 @@ fun ExamScreen(onFinalSubmit: (Int, Int) -> Unit) { // <-- Now accepts Int, Int 
         onFinalSubmit(score, questions.size)
     }
 
-    LaunchedEffect(key1 = timeLeft) {
-        if (timeLeft > 0) {
+    // Timer logic
+    LaunchedEffect(key1 = timeLeft, key2 = isLoading) {
+        if (!isLoading && timeLeft > 0) {
             delay(1000L)
             timeLeft--
-        } else {
+        } else if (!isLoading && timeLeft <= 0 && questions.isNotEmpty()) {
             submitExam()
         }
     }
 
+    // Loading State UI
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+    
+    // Error / Empty State UI
+    if (errorMessage != null || questions.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(errorMessage ?: "No questions available in this test.", color = MaterialTheme.colorScheme.error)
+        }
+        return
+    }
+
+    // Actual Exam UI
     val currentQ = questions[currentQIndex]
     val currentState = questionStates[currentQIndex]
 
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth()) {
             Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("CBT Simulator", color = MaterialTheme.colorScheme.onPrimary)
+                Text(testName, color = MaterialTheme.colorScheme.onPrimary)
                 Text("Time: ${timeLeft / 60}:${String.format("%02d", timeLeft % 60)}", color = MaterialTheme.colorScheme.onPrimary)
             }
         }
@@ -96,7 +164,7 @@ fun ExamScreen(onFinalSubmit: (Int, Int) -> Unit) { // <-- Now accepts Int, Int 
             Button(onClick = {
                 val status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED else QuestionStatus.NOT_ANSWERED
                 questionStates[currentQIndex] = currentState.copy(status = status)
-                if (currentQIndex < questions.size - 1) currentQIndex++ else submitExam() // <-- Updated submission logic
+                if (currentQIndex < questions.size - 1) currentQIndex++ else submitExam() 
             }) { Text(if (currentQIndex == questions.size - 1) "Submit" else "Save & Next") }
         }
     }
