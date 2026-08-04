@@ -26,8 +26,11 @@ import com.jcv.mocktests.models.Question
 import com.jcv.mocktests.models.QuestionState
 import com.jcv.mocktests.models.QuestionStatus
 import kotlinx.coroutines.delay
+import androidx.compose.ui.platform.LocalContext
+import com.jcv.mocktests.utils.LocalStorage
 
 // EXACT WEB APP COLORS
+
 val JcvGradient = Brush.horizontalGradient(listOf(Color(0xFF104E8B), Color(0xFF1E90FF)))
 val StatusAnsweredColor = Color(0xFF27AE60)
 val StatusNotAnsweredColor = Color(0xFFE74C3C)
@@ -43,6 +46,8 @@ fun ExamScreen(
     onFinalSubmit: (Int, Int) -> Unit,
     onExitReview: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val localStorage = remember { LocalStorage(context) }
     var questions by remember { mutableStateOf<List<Question>>(emptyList()) }
     val questionStates = remember { mutableStateListOf<QuestionState>() }
     
@@ -180,20 +185,26 @@ fun ExamScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                questionStates[currentQIndex] = currentState.copy(
-                                    status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED else QuestionStatus.NOT_ANSWERED
-                                )
-                                if (currentQIndex < questions.size - 1) {
-                                    currentQIndex++
-                                    if (questionStates[currentQIndex].status == QuestionStatus.NOT_VISITED) {
-                                        questionStates[currentQIndex] = questionStates[currentQIndex].copy(status = QuestionStatus.NOT_ANSWERED)
-                                    }
-                                } else {
-                                    var score = 0
-                                    questions.forEachIndexed { i, q -> if (questionStates[i].selectedOption == q.correct) score++ }
-                                    onFinalSubmit(score, questions.size)
-                                }
-                            },
+        questionStates[currentQIndex] = currentState.copy(
+            status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED else QuestionStatus.NOT_ANSWERED
+        )
+        if (currentQIndex < questions.size - 1) {
+            currentQIndex++
+            if (questionStates[currentQIndex].status == QuestionStatus.NOT_VISITED) {
+                questionStates[currentQIndex] = questionStates[currentQIndex].copy(status = QuestionStatus.NOT_ANSWERED)
+            }
+        } else {
+            // Calculate Score
+            var score = 0
+            questions.forEachIndexed { i, q -> if (questionStates[i].selectedOption == q.correct) score++ }
+            
+            // SAVE TO LOCAL STORAGE HERE
+            localStorage.markTestAsAttempted(courseId, testName)
+            
+            // Trigger Submit
+            onFinalSubmit(score, questions.size)
+        }
+    },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
                         ) { Text(if (currentQIndex == questions.size - 1) "Submit Exam" else "Save & Next") }
