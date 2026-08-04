@@ -230,12 +230,13 @@ fun ExamScreen(
             // Question Area
             LazyColumn(modifier = Modifier.weight(1f).padding(16.dp)) {
                 item {
-                    Row(crossAxisAlignment = CrossAxisAlignment.Start) {
-                        Text("Q ${currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(currentQ.text, fontSize = 18.sp, lineHeight = 26.sp)
-                    }
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
+    // Replaced crossAxisAlignment with verticalAlignment = Alignment.Top
+    Row(verticalAlignment = Alignment.Top) {
+        Text("Q ${currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text(currentQ.text, fontSize = 18.sp, lineHeight = 26.sp)
+    }
+    Spacer(modifier = Modifier.height(24.dp))
+}
 
                 items(currentQ.options.size) { optIdx ->
                     val optionText = currentQ.options[optIdx]
