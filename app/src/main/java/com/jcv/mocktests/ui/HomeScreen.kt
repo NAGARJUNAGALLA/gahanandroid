@@ -12,8 +12,7 @@ import com.jcv.mocktests.models.Course
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onNavigateToExam: (String) -> Unit) {
-    // Mocked list based on Firestore structure
+fun HomeScreen(onNavigateToCourse: (String) -> Unit) { // <-- Changed parameter name
     val courses = listOf(
         Course("1", "GROUP 1 MOCK TEST", 0.0, "Free group 1 test series"),
         Course("2", "TET & DSC PRO", 499.0, "Premium DSC tests")
@@ -28,7 +27,7 @@ fun HomeScreen(onNavigateToExam: (String) -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(8.dp)
-                        .clickable { onNavigateToExam(course.sheetId) }
+                        .clickable { onNavigateToCourse(course.sheetId) } // <-- Updated click listener
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(course.title, style = MaterialTheme.typography.titleMedium)
