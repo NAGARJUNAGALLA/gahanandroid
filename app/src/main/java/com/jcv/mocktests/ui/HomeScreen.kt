@@ -1,5 +1,6 @@
 package com.jcv.mocktests.ui
-
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.border
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.Icons.Default.List
@@ -244,7 +245,7 @@ fun TestbookCourseCard(course: Course, onClick: () -> Unit) {
                         .background(TbBlue.copy(alpha = 0.1f), RoundedCornerShape(4.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Outlined.LibraryBooks, contentDescription = null, tint = TbBlue)
+                    Icon(Icons.Default.Menu, contentDescription = null, tint = TbBlue)
                 }
             }
 
