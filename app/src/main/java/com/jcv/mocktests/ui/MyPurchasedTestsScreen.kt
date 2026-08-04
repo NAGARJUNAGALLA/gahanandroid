@@ -39,17 +39,23 @@ fun MyPurchasedTestsScreen(
 
         val db = FirebaseFirestore.getInstance()
 
-        // Fetch user's purchased course IDs
-        db.collection("users").document(currentUser.uid).get()
-            .addOnSuccessListener { userDoc ->
-                val purchasedIds = userDoc.get("purchasedCourses") as? List<String> ?: emptyList()
+        // 1. Fetch user's approved registrations from the pending_registrations collection
+        db.collection("pending_registrations")
+            .whereEqualTo("uid", currentUser.uid)
+            .get()
+            .addOnSuccessListener { paymentsSnap ->
+                
+                // Filter only approved payments and map their sheetIds
+                val approvedSheetIds = paymentsSnap.documents
+                    .filter { it.getString("status") == "approved" }
+                    .mapNotNull { it.getString("sheetId") }
 
-                if (purchasedIds.isEmpty()) {
+                if (approvedSheetIds.isEmpty()) {
                     isLoading = false
                     return@addOnSuccessListener
                 }
 
-                // Fetch the main test list and filter by purchased IDs
+                // 2. Fetch the main test list and cross-reference with approved sheetIds
                 db.collection("exams").document("testList").get()
                     .addOnSuccessListener { examsDoc ->
                         if (examsDoc.exists()) {
@@ -57,7 +63,8 @@ fun MyPurchasedTestsScreen(
                             val fetchedCourses = testsList.mapNotNull { map ->
                                 val sheetId = map["sheetId"] as? String ?: return@mapNotNull null
                                 
-                                if (purchasedIds.contains(sheetId)) {
+                                // Only include if the sheetId is in the user's approved list
+                                if (approvedSheetIds.contains(sheetId)) {
                                     val title = map["title"] as? String ?: "JCV Test Series"
                                     val titleUpper = title.uppercase(Locale.getDefault())
                                     
@@ -97,7 +104,7 @@ fun MyPurchasedTestsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("My Learning", fontWeight = FontWeight.ExtraBold, color = Color.White) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ByjusPurple) // Using the Byju's purple theme
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = ByjusPurple) 
             )
         }
     ) { padding ->
@@ -105,7 +112,7 @@ fun MyPurchasedTestsScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(AppBackground) // Using the soft gray background
+                .background(AppBackground)
         ) {
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -125,13 +132,12 @@ fun MyPurchasedTestsScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(1), // Match the single-column gamified layout
+                    columns = GridCells.Fixed(1), 
                     contentPadding = PaddingValues(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(purchasedCourses) { course ->
-                        // Reusing the gamified card from the HomeScreen
                         ByjusCourseCard(course = course, onClick = { onNavigateToCourse(course.sheetId) })
                     }
                 }
