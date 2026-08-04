@@ -6,29 +6,46 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.google.firebase.firestore.FirebaseFirestore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseDetailScreen(
-    courseId: String?,
+    courseId: String,
     onNavigateToExam: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT")
     
-    // Mock data for tests inside this course
-    val mockTests = listOf("Grand Test 1", "Grand Test 2", "Subject Test - History")
+    var testNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(courseId) {
+        val db = FirebaseFirestore.getInstance()
+        db.collection("pro_course_questions").document(courseId).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    val data = doc.data
+                    val testsMap = data?.get("tests") as? Map<String, Any>
+                    // Get just the names of the tests (e.g. "Mock Test 1")
+                    testNames = testsMap?.keys?.toList() ?: emptyList()
+                }
+                isLoading = false
+            }
+            .addOnFailureListener {
+                isLoading = false
+            }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Course Details") },
-                navigationIcon = {
-                    TextButton(onClick = onNavigateBack) { Text("Back") }
-                }
+                navigationIcon = { TextButton(onClick = onNavigateBack) { Text("Back") } }
             )
         }
     ) { padding ->
@@ -44,32 +61,38 @@ fun CourseDetailScreen(
             }
 
             if (selectedTab == 0) {
-                // Overview Tab
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Comprehensive mock tests designed to help you prepare and excel in your upcoming examinations.")
+                    Text("Comprehensive mock tests designed to help you prepare and excel.")
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth()) {
                         Text("Go to Content")
                     }
                 }
             } else {
-                // Content Tab
-                LazyColumn(modifier = Modifier.padding(16.dp)) {
-                    items(mockTests) { testName ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                                .clickable { onNavigateToExam(testName) } // Pass test ID to exam screen
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(testName, style = MaterialTheme.typography.bodyLarge)
-                                Text(">")
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (isLoading) {
+                        CircularProgressIndicator()
+                    } else if (testNames.isEmpty()) {
+                        Text("No tests found for this course.")
+                    } else {
+                        LazyColumn(modifier = Modifier.padding(16.dp).fillMaxSize()) {
+                            items(testNames) { testName ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                        .clickable { onNavigateToExam(testName) }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(testName, style = MaterialTheme.typography.bodyLarge)
+                                        Text(">")
+                                    }
+                                }
                             }
                         }
                     }
