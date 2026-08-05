@@ -17,7 +17,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage 
 
 // Reusing the same blue palette
-val ViewSeriesBlue = Color(0xFF2962FF)
 val DarkHeaderColor = Color(0xFF181E2F) // Matching the dark top bar from the image
 
 @OptIn(ExperimentalMaterial3Api::class)
