@@ -93,9 +93,13 @@ fun ExamScreen(
                         }
                     }
                     questions = parsedQuestions
+                    
+                    // FIXED: Always initialize the states list to match the questions size
+                    // This prevents IndexOutOfBounds crashes in the drawer grid during review mode.
+                    questionStates.clear()
+                    questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                    
                     if (!isReviewMode) {
-                        questionStates.clear()
-                        questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
                         timeLeft = parsedQuestions.size * 60 
                         if (parsedQuestions.isNotEmpty()) {
                             questionStates[0] = questionStates[0].copy(status = QuestionStatus.NOT_ANSWERED)
@@ -159,6 +163,7 @@ fun ExamScreen(
                                     Text(userIdentifier, color = Color.Gray, fontSize = 12.sp)
                                 }
                             }
+                            // FIXED: Using standard Divider for compatibility
                             Divider(color = Color.LightGray.copy(alpha = 0.5f))
 
                             // 2. Legend Section
