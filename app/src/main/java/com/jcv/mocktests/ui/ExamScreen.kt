@@ -130,7 +130,7 @@ fun ExamScreen(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = drawerState,
-            gesturesEnabled = false,
+            gesturesEnabled = drawerState.isOpen,
             drawerContent = {
                 // Flip drawer contents back to LTR
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
