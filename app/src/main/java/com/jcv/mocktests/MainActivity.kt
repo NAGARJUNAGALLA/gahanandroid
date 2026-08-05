@@ -4,11 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.google.firebase.auth.FirebaseAuth
 import com.jcv.mocktests.ui.*
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -26,12 +28,20 @@ class MainActivity : ComponentActivity() {
 fun MockTestsApp() {
     val navController = rememberNavController()
     
-    // CHANGE: Always start at the dashboard, default to study_material
-    val startDestination = "main_dashboard/study_material"
+    // NEW: Check Firebase Auth state to determine starting screen
+    val auth = remember { FirebaseAuth.getInstance() }
+    val currentUser = auth.currentUser
+    
+    // CHANGE: Start at login if not authenticated, otherwise go to dashboard
+    val startDestination = if (currentUser != null) {
+        "main_dashboard/study_material"
+    } else {
+        "login"
+    }
 
     NavHost(navController = navController, startDestination = startDestination) {
         
-        // NEW: Dashboard Route handling tabs
+        // Dashboard Route handling tabs
         composable(
             route = "main_dashboard/{tab}",
             arguments = listOf(navArgument("tab") { type = NavType.StringType })
@@ -41,13 +51,17 @@ fun MockTestsApp() {
             MainDashboardScreen(
                 initialTab = tab,
                 onNavigateToCourse = { courseId -> navController.navigate("course_details/$courseId") },
-                onNavigateToLogin = { navController.navigate("login") }
+                onNavigateToLogin = { 
+                    navController.navigate("login") {
+                        popUpTo(0) // Clear backstack on logout
+                    }
+                }
             )
         }
 
         composable("login") {
             AuthScreen(
-                // CHANGE: After successful login, route back to the Dashboard on the "tests" tab
+                // After successful login, route back to the Dashboard on the "tests" tab
                 onNavigateToHome = { 
                     navController.navigate("main_dashboard/tests") { 
                         popUpTo(0) // Clear the backstack so they don't hit the login screen again by pressing back
@@ -76,7 +90,7 @@ fun MockTestsApp() {
                     val encodedTestName = URLEncoder.encode(testName, "UTF-8")
                     navController.navigate("exam/$cId/$encodedTestName/$isReviewMode") 
                 },
-                // CHANGE: Route to the study material tab in the dashboard
+                // Route to the study material tab in the dashboard
                 onNavigateToStudyMaterial = { 
                     navController.navigate("main_dashboard/study_material") { popUpTo(0) }
                 },
@@ -104,6 +118,9 @@ fun MockTestsApp() {
                     navController.navigate("results/$score/$total") { 
                         popUpTo("main_dashboard/tests") 
                     }
+                },
+                onExitReview = {
+                    navController.popBackStack()
                 }
             )
         }
