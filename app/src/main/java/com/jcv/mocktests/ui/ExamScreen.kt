@@ -159,7 +159,7 @@ fun ExamScreen(
                                     Text(userIdentifier, color = Color.Gray, fontSize = 12.sp)
                                 }
                             }
-                            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f))
+                            Divider(color = Color.LightGray.copy(alpha = 0.5f))
 
                             // 2. Legend Section
                             Column(modifier = Modifier.padding(16.dp)) {
