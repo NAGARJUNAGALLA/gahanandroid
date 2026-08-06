@@ -1,16 +1,13 @@
 package com.jcv.mocktests.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -18,7 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -30,7 +27,6 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.BorderStroke
 
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
 
@@ -40,7 +36,14 @@ val LightGreyBg = Color(0xFFF5F6FA)
 val GoldColor = Color(0xFFFFC107)
 val RedBadgeColor = Color(0xFFE53935)
 
-// Data models mirroring your Firebase structure
+// Blue Gradient for Category Cards
+val CardBlueGradient = Brush.verticalGradient(
+    colors = listOf(
+        Color(0xFF64B5F6), // Lighter blue at the top
+        Color(0xFF1565C0)  // Darker theme blue at the bottom
+    )
+)
+
 data class CourseModel(
     val sheetId: String,
     val title: String,
@@ -75,15 +78,12 @@ fun MainDashboardScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // State for dynamic Firebase data
     var allCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var freeCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var proCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var purchasedCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
-    var dynamicTopics by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    // Fetch logic based on source code instructions
     LaunchedEffect(Unit) {
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
@@ -96,15 +96,7 @@ fun MainDashboardScreen(
                 val feeString = map["fee"]?.toString() ?: "0"
                 val fee = feeString.toDoubleOrNull() ?: 0.0
                 val sheetId = map["sheetId"] as? String ?: ""
-                
-                // Categorization logic matching your web app rules
-                val topic = when {
-                    title.uppercase().contains("GROUP") -> "GROUP EXAMS"
-                    title.uppercase().contains("CURRENT") -> "CURRENT AFFAIRS"
-                    title.uppercase().contains("IIT") || title.uppercase().contains("CONSTABLE") -> "IIT"
-                    title.uppercase().contains("TET") || title.uppercase().contains("DSC") -> "TET & DSC"
-                    else -> "OTHERS"
-                }
+                val topic = "OTHERS" // Kept for generic mapping if needed
                 
                 CourseModel(sheetId, title, fee, topic)
             }
@@ -117,7 +109,6 @@ fun MainDashboardScreen(
                         PaymentModel(sheetId, status)
                     }
                     
-                    // Approved purchases
                     val approvedSheetIds = payments.filter { it.status == "approved" }.map { it.sheetId }
                     
                     allCourses = fetchedCourses
@@ -125,20 +116,12 @@ fun MainDashboardScreen(
                     purchasedCourses = fetchedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
                     proCourses = fetchedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
                     
-                    val topicsList = mutableListOf("ALL", "FREE", "PURCHASED", "PRO")
-                    topicsList.addAll(fetchedCourses.map { it.topic }.distinct())
-                    dynamicTopics = topicsList
-                    
                     isLoading = false
                 }
             } else {
                 allCourses = fetchedCourses
                 freeCourses = fetchedCourses.filter { it.fee == 0.0 }
                 proCourses = fetchedCourses.filter { it.fee > 0.0 }
-                
-                val topicsList = mutableListOf("ALL", "FREE", "PRO")
-                topicsList.addAll(fetchedCourses.map { it.topic }.distinct())
-                dynamicTopics = topicsList
                 
                 isLoading = false
             }
@@ -155,9 +138,7 @@ fun MainDashboardScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.White)
-                        .verticalScroll(rememberScrollState())
                 ) {
-                    // Drawer Header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -191,7 +172,6 @@ fun MainDashboardScreen(
 
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    // DYNAMIC FREE COURSES
                     if (freeCourses.isNotEmpty()) {
                         DrawerSectionHeader("FREE COURSES", Icons.Default.Star, Color(0xFF4CAF50))
                         freeCourses.forEach { course ->
@@ -199,7 +179,6 @@ fun MainDashboardScreen(
                         }
                     }
 
-                    // DYNAMIC PURCHASED COURSES
                     if (purchasedCourses.isNotEmpty()) {
                         DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
                         purchasedCourses.forEach { course ->
@@ -207,7 +186,6 @@ fun MainDashboardScreen(
                         }
                     }
 
-                    // DYNAMIC PRO COURSES
                     if (proCourses.isNotEmpty()) {
                         DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
                         proCourses.forEach { course ->
@@ -218,7 +196,6 @@ fun MainDashboardScreen(
                     Spacer(modifier = Modifier.weight(1f))
                     Divider()
                     
-                    // Profile & Logout Info
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -308,7 +285,7 @@ fun MainDashboardScreen(
                 } else {
                     when (selectedTab) {
                         BottomTab.HOME -> {
-                            DashboardHomeContent(allCourses, freeCourses, purchasedCourses, proCourses, dynamicTopics, onNavigateToCourse)
+                            DashboardHomeContent(allCourses, freeCourses, purchasedCourses, proCourses, onNavigateToCourse)
                         }
                         BottomTab.FREE_COURSES -> {
                             CourseGridScreen("Free Courses", freeCourses, onNavigateToCourse)
@@ -363,128 +340,148 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// HOME TAB CONTENT & FILTER LOGIC
+// HOME TAB CONTENT - CATEGORIES GRID OR COURSE LIST
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardHomeContent(
     allCourses: List<CourseModel>,
     freeCourses: List<CourseModel>,
     purchasedCourses: List<CourseModel>,
     proCourses: List<CourseModel>,
-    dynamicTopics: List<String>, 
     onNavigateToCourse: (String) -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var activeTopic by remember { mutableStateOf("ALL") }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    
+    // The specific categories requested
+    val homeCategories = listOf(
+        "Free Courses", "Pro Courses", "Purchased", 
+        "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET"
+    )
 
-    // Filtering logic mirroring your web app
-    val displayedCourses = remember(searchQuery, activeTopic, allCourses) {
-        var filtered = when (activeTopic) {
-            "ALL" -> allCourses
-            "FREE" -> freeCourses
-            "PURCHASED" -> purchasedCourses
-            "PRO" -> proCourses
-            else -> allCourses.filter { it.topic == activeTopic }
-        }
-        
-        if (searchQuery.isNotBlank()) {
-            filtered = filtered.filter { it.title.contains(searchQuery, ignoreCase = true) }
-        }
-        filtered
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Image Slider Placeholder
-        Box(
-            modifier = Modifier.fillMaxWidth().height(180.dp).background(ThemeDarkBlue),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Slider", tint = Color.White, modifier = Modifier.size(48.dp))
-                Text("Promotional Image Slider", color = Color.White)
-            }
-        }
-
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search for a course...", color = Color.Gray, fontSize = 14.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray) },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ThemeBlue,
-                    unfocusedBorderColor = Color.LightGray,
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White
-                ),
-                shape = RoundedCornerShape(8.dp)
+    if (selectedCategory == null) {
+        // STATE 1: SHOW CATEGORY CARDS
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Text(
+                text = "What are you looking for?",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = Color.DarkGray,
+                modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("FILTER BY TOPICS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-            
-            // Dynamic Filter Chips
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(dynamicTopics) { topic ->
-                    val isSelected = activeTopic == topic
-                    val count = when (topic) {
-                        "ALL" -> allCourses.size
-                        "FREE" -> freeCourses.size
-                        "PURCHASED" -> purchasedCourses.size
-                        "PRO" -> proCourses.size
-                        else -> allCourses.count { it.topic == topic }
-                    }
-                    
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = if (isSelected) Color(0xFFE3F2FD) else Color.White,
-                        border = BorderStroke(1.dp, if (isSelected) ThemeBlue else Color.LightGray),
-                        modifier = Modifier.clickable { activeTopic = topic }
-                    ) {
-                        Text(
-                            text = "$topic ($count)",
-                            color = if (isSelected) ThemeBlue else Color.DarkGray,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
+                items(homeCategories) { categoryName ->
+                    CategoryGradientCard(title = categoryName) {
+                        selectedCategory = categoryName
                     }
                 }
             }
+        }
+    } else {
+        // STATE 2: SHOW COURSES FOR SELECTED CATEGORY
+        val displayedCourses = remember(selectedCategory, allCourses) {
+            when (selectedCategory) {
+                "Free Courses" -> freeCourses
+                "Pro Courses" -> proCourses
+                "Purchased" -> purchasedCourses
+                "AP TET" -> allCourses.filter { it.title.contains("TET", ignoreCase = true) }
+                "APPSC" -> allCourses.filter { 
+                    it.title.contains("APPSC", ignoreCase = true) || 
+                    it.title.contains("GROUP", ignoreCase = true) 
+                }
+                "IIT JEE MAINS" -> allCourses.filter { 
+                    it.title.contains("IIT", ignoreCase = true) || 
+                    it.title.contains("JEE", ignoreCase = true) 
+                }
+                "AP EAPCET" -> allCourses.filter { it.title.contains("EAPCET", ignoreCase = true) }
+                else -> emptyList()
+            }
+        }
 
-            Text("COURSES (${displayedCourses.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
-            
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Courses Grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize()
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            // Header with Back Button
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 16.dp)
             ) {
-                items(displayedCourses) { course ->
-                    CourseCardView(course) { onNavigateToCourse(course.sheetId) }
+                IconButton(
+                    onClick = { selectedCategory = null },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = ThemeBlue)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = selectedCategory ?: "",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.DarkGray
+                )
+            }
+
+            if (displayedCourses.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No courses found in this category.", color = Color.Gray)
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(displayedCourses) { course ->
+                        CourseCardView(course) { onNavigateToCourse(course.sheetId) }
+                    }
                 }
             }
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// GRADIENT CATEGORY CARD DESIGN
+// ---------------------------------------------------------------------------
+@Composable
+fun CategoryGradientCard(title: String, onClick: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        modifier = Modifier
+            .aspectRatio(0.9f)
+            .clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(brush = CardBlueGradient),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = title.uppercase(),
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// INDIVIDUAL COURSE CARD DESIGN 
+// ---------------------------------------------------------------------------
 @Composable
 fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCourse: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("$title (${courses.size})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+        Text("$title (${courses.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
         Spacer(modifier = Modifier.height(12.dp))
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -499,9 +496,6 @@ fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCour
     }
 }
 
-// ---------------------------------------------------------------------------
-// INDIVIDUAL COURSE CARD DESIGN (Matches Provided Images)
-// ---------------------------------------------------------------------------
 @Composable
 fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
@@ -514,7 +508,6 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
         modifier = Modifier.clickable { onClick() }.fillMaxWidth()
     ) {
         Column {
-            // Dark Header Graphic
             Box(
                 modifier = Modifier.fillMaxWidth().height(100.dp).background(ThemeDarkBlue),
                 contentAlignment = Alignment.Center
@@ -534,7 +527,6 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
                 }
             }
 
-            // Card Content Details
             Column(modifier = Modifier.padding(8.dp)) {
                 Text(
                     text = course.title,
