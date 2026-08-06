@@ -301,8 +301,7 @@ fun MainDashboardScreen(
                             contentDescription = "Loading Logo",
                             modifier = Modifier.size(80.dp).clip(CircleShape)
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        CircularProgressIndicator(color = ThemeBlue)
+                        
                     }
                 } else {
                     when (selectedTab) {
