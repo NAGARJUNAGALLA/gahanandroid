@@ -1,5 +1,6 @@
 package com.jcv.mocktests.ui
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,8 +8,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -41,35 +44,51 @@ val StatusNotAnsweredColor = Color(0xFFE74C3C)
 val StatusMarkedColor = Color(0xFF9B59B6)
 val StatusNotVisitedColor = Color(0xFFFFFFFF)
 
+enum class ExamStep { INSTRUCTIONS, EXAM, SUBMIT_CONFIRM }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExamScreen(
     courseId: String,
     testName: String,
-    isReviewMode: Boolean = false, // Toggle between Exam and Review
+    isReviewMode: Boolean = false, 
     onFinalSubmit: (Int, Int) -> Unit,
     onExitReview: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val localStorage = remember { LocalStorage(context) }
+    val prefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) }
+    val prefKey = "exam_state_${courseId}_${testName}"
+
     var questions by remember { mutableStateOf<List<Question>>(emptyList()) }
     val questionStates = remember { mutableStateListOf<QuestionState>() }
     
+    // UI State Management
+    var examStep by remember { mutableStateOf(if (isReviewMode) ExamStep.EXAM else ExamStep.INSTRUCTIONS) }
     var currentQIndex by remember { mutableIntStateOf(0) }
-    var timeLeft by remember { mutableIntStateOf(3600) }
+    var timeLeft by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
+    var hasAgreedToRules by remember { mutableStateOf(false) }
 
-    // Navigation Drawer State
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // Firebase Auth for Username
     val auth = FirebaseAuth.getInstance()
     val currentUser = auth.currentUser
     val userName = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Student"
     val userIdentifier = currentUser?.email ?: currentUser?.uid ?: "JCV-USER"
 
-    // Fetch Questions
+    // Helper function to save progress locally
+    fun saveProgressLocally() {
+        if (isReviewMode || questions.isEmpty()) return
+        val statesString = questionStates.joinToString(";") { "${it.status.name},${it.selectedOption ?: -1}" }
+        prefs.edit()
+            .putString(prefKey, statesString)
+            .putInt("${prefKey}_time", timeLeft)
+            .apply()
+    }
+
+    // Fetch Questions & Restore State
     LaunchedEffect(courseId, testName) {
         val db = FirebaseFirestore.getInstance()
         db.collection("pro_course_questions").document(courseId).get()
@@ -93,15 +112,36 @@ fun ExamScreen(
                         }
                     }
                     questions = parsedQuestions
-                    
-                    // FIXED: Always initialize the states list to match the questions size
-                    // This prevents IndexOutOfBounds crashes in the drawer grid during review mode.
                     questionStates.clear()
-                    questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                    
+                    // Attempt to restore saved state
+                    val savedStatesStr = prefs.getString(prefKey, "")
+                    val savedTime = prefs.getInt("${prefKey}_time", parsedQuestions.size * 60)
+                    
+                    if (!savedStatesStr.isNullOrBlank()) {
+                        try {
+                            val restored = savedStatesStr.split(";").map {
+                                val parts = it.split(",")
+                                QuestionState(
+                                    status = QuestionStatus.valueOf(parts[0]),
+                                    selectedOption = parts[1].toInt().takeIf { opt -> opt != -1 }
+                                )
+                            }
+                            if (restored.size == parsedQuestions.size) {
+                                questionStates.addAll(restored)
+                            } else {
+                                questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                            }
+                        } catch (e: Exception) {
+                            questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                        }
+                    } else {
+                        questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                    }
                     
                     if (!isReviewMode) {
-                        timeLeft = parsedQuestions.size * 60 
-                        if (parsedQuestions.isNotEmpty()) {
+                        timeLeft = savedTime 
+                        if (questions.isNotEmpty() && questionStates[0].status == QuestionStatus.NOT_VISITED) {
                             questionStates[0] = questionStates[0].copy(status = QuestionStatus.NOT_ANSWERED)
                         }
                     }
@@ -110,11 +150,12 @@ fun ExamScreen(
             }
     }
 
-    // Timer logic (Only in Exam Mode)
-    LaunchedEffect(key1 = timeLeft, key2 = isLoading) {
-        if (!isReviewMode && !isLoading && timeLeft > 0) {
+    // Timer logic
+    LaunchedEffect(key1 = timeLeft, key2 = isLoading, key3 = examStep) {
+        if (!isReviewMode && !isLoading && timeLeft > 0 && examStep == ExamStep.EXAM) {
             delay(1000L)
             timeLeft--
+            if (timeLeft % 10 == 0) saveProgressLocally() // Auto-save every 10 seconds
         }
     }
 
@@ -123,6 +164,152 @@ fun ExamScreen(
         return
     }
 
+    // ----------------------------------------------------------------------------------
+    // STEP 1: INSTRUCTIONS SCREEN
+    // ----------------------------------------------------------------------------------
+    if (examStep == ExamStep.INSTRUCTIONS) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(testName, color = Color.White, fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onExitReview) { Icon(Icons.Default.ArrowBack, tint = Color.White, contentDescription = "Back") }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF104E8B))
+                )
+            },
+            bottomBar = {
+                Surface(shadowElevation = 8.dp) {
+                    Column(modifier = Modifier.fillMaxWidth().background(Color.White).padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = hasAgreedToRules, onCheckedChange = { hasAgreedToRules = it })
+                            Text("I have read and understood the instructions.", fontSize = 14.sp)
+                        }
+                        Button(
+                            onClick = { 
+                                examStep = ExamStep.EXAM 
+                                saveProgressLocally()
+                            },
+                            enabled = hasAgreedToRules,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
+                        ) {
+                            Text("Start Test", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                Text("Please read the following instructions carefully", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+                
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Total Questions: ${questions.size}", fontWeight = FontWeight.Bold)
+                        Text("Total Time Available: ${questions.size} Mins", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Text("Color Legend:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(24.dp).background(StatusNotVisitedColor, RoundedCornerShape(4.dp)).border(1.dp, Color.Gray, RoundedCornerShape(4.dp)))
+                        Text(" You have not visited the question yet.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(24.dp).background(StatusNotAnsweredColor, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)))
+                        Text(" You have not answered the question.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(24.dp).background(StatusAnsweredColor, RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 8.dp, bottomEnd = 8.dp)))
+                        Text(" You have answered the question.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(24.dp).background(StatusMarkedColor, CircleShape))
+                        Text(" Marked for review without answering.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+                
+                Text("General Rules:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                Text("1. The clock has been set at the server and will display the remaining time at the top of your screen.\n2. Click 'Save & Next' to save your answer.\n3. Click 'Mark for Review' if you want to double-check your answer later.\n4. You can navigate between questions using the Palette menu.", fontSize = 14.sp, lineHeight = 22.sp)
+            }
+        }
+        return
+    }
+
+    // ----------------------------------------------------------------------------------
+    // STEP 2: SUBMIT CONFIRMATION SCREEN
+    // ----------------------------------------------------------------------------------
+    if (examStep == ExamStep.SUBMIT_CONFIRM) {
+        val answered = questionStates.count { it.status == QuestionStatus.ANSWERED || it.status == QuestionStatus.ANSWERED_AND_MARKED }
+        val marked = questionStates.count { it.status == QuestionStatus.MARKED_FOR_REVIEW }
+        val notAnswered = questionStates.count { it.status == QuestionStatus.NOT_ANSWERED }
+        val notVisited = questionStates.count { it.status == QuestionStatus.NOT_VISITED }
+
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier.fillMaxWidth(0.9f).padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Submit Examination", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color(0xFF104E8B))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Are you sure you want to submit the exam? You will not be able to return to the questions.", textAlign = TextAlign.Center, color = Color.DarkGray)
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Stats Grid
+                    Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(answered.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusAnsweredColor)
+                            Text("Answered", fontSize = 10.sp, color = Color.Gray)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(notAnswered.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusNotAnsweredColor)
+                            Text("Skipped", fontSize = 10.sp, color = Color.Gray)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(marked.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusMarkedColor)
+                            Text("Marked", fontSize = 10.sp, color = Color.Gray)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = { examStep = ExamStep.EXAM },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Return") }
+                        
+                        Button(
+                            onClick = {
+                                saveProgressLocally()
+                                var score = 0
+                                questions.forEachIndexed { i, q -> if (questionStates[i].selectedOption == q.correct) score++ }
+                                localStorage.markTestAsAttempted(courseId, testName)
+                                onFinalSubmit(score, questions.size)
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
+                        ) { Text("Yes, Submit") }
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    // ----------------------------------------------------------------------------------
+    // STEP 3: MAIN EXAM / REVIEW SHELL
+    // ----------------------------------------------------------------------------------
     val currentQ = questions.getOrNull(currentQIndex) ?: return
     val currentState = questionStates.getOrNull(currentQIndex) ?: QuestionState()
 
@@ -145,25 +332,17 @@ fun ExamScreen(
                                 .background(Color.White)
                         ) {
                             // 1. Drawer Header (User Info)
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(
-                                    modifier = Modifier
-                                        .size(50.dp)
-                                        .background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp)),
+                                    modifier = Modifier.size(50.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp)),
                                     contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(32.dp))
-                                }
+                                ) { Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(32.dp)) }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
                                     Text(userName, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
                                     Text(userIdentifier, color = Color.Gray, fontSize = 12.sp)
                                 }
                             }
-                            // FIXED: Using standard Divider for compatibility
                             Divider(color = Color.LightGray.copy(alpha = 0.5f))
 
                             // 2. Legend Section
@@ -209,9 +388,7 @@ fun ExamScreen(
                                     Text(
                                         text = if (isReviewMode) "REVIEW PALETTE" else "QUESTION PALETTE",
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                        textAlign = TextAlign.Center,
-                                        color = Color(0xFF104E8B),
-                                        fontWeight = FontWeight.Bold
+                                        textAlign = TextAlign.Center, color = Color(0xFF104E8B), fontWeight = FontWeight.Bold
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -223,14 +400,12 @@ fun ExamScreen(
                                 ) {
                                     items(questions.size) { idx ->
                                         val state = questionStates[idx]
-                                        
                                         val shape = when (state.status) {
                                             QuestionStatus.ANSWERED -> RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
                                             QuestionStatus.NOT_ANSWERED -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
                                             QuestionStatus.MARKED_FOR_REVIEW, QuestionStatus.ANSWERED_AND_MARKED -> CircleShape
                                             else -> RoundedCornerShape(4.dp)
                                         }
-                                        
                                         val color = if (isReviewMode) {
                                             if (state.selectedOption == null) Color.White
                                             else if (state.selectedOption == questions[idx].correct) StatusAnsweredColor
@@ -249,9 +424,7 @@ fun ExamScreen(
 
                                         Box(
                                             modifier = Modifier
-                                                .aspectRatio(1f)
-                                                .clip(shape)
-                                                .background(color)
+                                                .aspectRatio(1f).clip(shape).background(color)
                                                 .border(
                                                     width = if (isActive) 2.dp else if (color == StatusNotVisitedColor) 1.dp else 0.dp,
                                                     color = if (isActive) Color.Blue else if (color == StatusNotVisitedColor) Color.LightGray else Color.Transparent,
@@ -261,6 +434,7 @@ fun ExamScreen(
                                                     currentQIndex = idx
                                                     if (!isReviewMode && questionStates[idx].status == QuestionStatus.NOT_VISITED) {
                                                         questionStates[idx] = questionStates[idx].copy(status = QuestionStatus.NOT_ANSWERED)
+                                                        saveProgressLocally()
                                                     }
                                                     scope.launch { drawerState.close() }
                                                 },
@@ -268,13 +442,7 @@ fun ExamScreen(
                                         ) {
                                             Text("${idx + 1}", color = textColor, fontWeight = FontWeight.Bold)
                                             if (!isReviewMode && state.status == QuestionStatus.ANSWERED_AND_MARKED) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .align(Alignment.BottomEnd)
-                                                        .padding(2.dp)
-                                                        .size(6.dp)
-                                                        .background(Color.Green, CircleShape)
-                                                )
+                                                Box(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(6.dp).background(Color.Green, CircleShape))
                                             }
                                         }
                                     }
@@ -287,17 +455,12 @@ fun ExamScreen(
                                     Button(
                                         onClick = {
                                             scope.launch { drawerState.close() }
-                                            var score = 0
-                                            questions.forEachIndexed { i, q -> if (questionStates[i].selectedOption == q.correct) score++ }
-                                            localStorage.markTestAsAttempted(courseId, testName)
-                                            onFinalSubmit(score, questions.size)
+                                            examStep = ExamStep.SUBMIT_CONFIRM
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F4F6)),
                                         shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text("Submit Exam", color = Color.Black, fontWeight = FontWeight.Bold)
-                                    }
+                                    ) { Text("Submit Exam", color = Color.Black, fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
@@ -305,7 +468,6 @@ fun ExamScreen(
                 }
             }
         ) {
-            // Flip the main screen scaffold back to LTR so it looks normal
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Scaffold(
                     topBar = {
@@ -320,19 +482,14 @@ fun ExamScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = if (isReviewMode) "REVIEW MODE" else "CBT Simulator",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier
-                                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    color = Color.White, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 if (!isReviewMode) {
                                     Row(
-                                        modifier = Modifier
-                                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(Icons.Default.Info, contentDescription = "Time", tint = Color.White, modifier = Modifier.size(16.dp))
@@ -366,6 +523,7 @@ fun ExamScreen(
                                                 questionStates[currentQIndex] = currentState.copy(
                                                     status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED_AND_MARKED else QuestionStatus.MARKED_FOR_REVIEW
                                                 )
+                                                saveProgressLocally()
                                                 if (currentQIndex < questions.size - 1) currentQIndex++
                                             },
                                             modifier = Modifier.weight(1f),
@@ -375,6 +533,7 @@ fun ExamScreen(
                                         OutlinedButton(
                                             onClick = {
                                                 questionStates[currentQIndex] = currentState.copy(selectedOption = null, status = QuestionStatus.NOT_ANSWERED)
+                                                saveProgressLocally()
                                             },
                                             modifier = Modifier.weight(1f)
                                         ) { Text("Clear") }
@@ -385,16 +544,15 @@ fun ExamScreen(
                                             questionStates[currentQIndex] = currentState.copy(
                                                 status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED else QuestionStatus.NOT_ANSWERED
                                             )
+                                            saveProgressLocally()
                                             if (currentQIndex < questions.size - 1) {
                                                 currentQIndex++
                                                 if (questionStates[currentQIndex].status == QuestionStatus.NOT_VISITED) {
                                                     questionStates[currentQIndex] = questionStates[currentQIndex].copy(status = QuestionStatus.NOT_ANSWERED)
+                                                    saveProgressLocally()
                                                 }
                                             } else {
-                                                var score = 0
-                                                questions.forEachIndexed { i, q -> if (questionStates[i].selectedOption == q.correct) score++ }
-                                                localStorage.markTestAsAttempted(courseId, testName)
-                                                onFinalSubmit(score, questions.size)
+                                                examStep = ExamStep.SUBMIT_CONFIRM
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth(),
@@ -460,6 +618,7 @@ fun ExamScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable(enabled = !isReviewMode) {
                                             questionStates[currentQIndex] = currentState.copy(selectedOption = optIdx)
+                                            saveProgressLocally()
                                         }
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -499,7 +658,7 @@ fun ExamScreen(
     }
 }
 
-// Reusable Legend Item for Drawer
+// Reusable Legend Item
 @Composable
 fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.ui.graphics.Shape, hasDot: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.width(130.dp)) {
@@ -512,12 +671,7 @@ fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.
         ) {
             Text(text = count.toString(), fontSize = 12.sp, color = if (color == StatusNotVisitedColor) Color.Black else Color.White)
             if (hasDot) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(6.dp)
-                        .background(Color.Green, CircleShape)
-                )
+                Box(modifier = Modifier.align(Alignment.BottomEnd).size(6.dp).background(Color.Green, CircleShape))
             }
         }
         Spacer(modifier = Modifier.width(8.dp))
