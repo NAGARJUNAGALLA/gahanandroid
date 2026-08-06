@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,14 +23,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 
-// Updated Tabs based on instructions
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
 
-val ThemeBlue = Color(0xFF1976D2) // Matching the header blue from the reference
+val ThemeBlue = Color(0xFF1976D2)
 val ThemeDarkBlue = Color(0xFF0D47A1)
 val LightGreyBg = Color(0xFFF5F6FA)
+
+// Data model for dynamic Firebase fetching
+data class CourseModel(
+    val id: String,
+    val title: String,
+    val price: String,
+    val keywords: List<String> = emptyList()
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,37 +62,68 @@ fun MainDashboardScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+    // State for dynamic Firebase data
+    var courses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+    var categories by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // Fetch Courses and Categories dynamically
+    LaunchedEffect(Unit) {
+        val db = FirebaseFirestore.getInstance()
+        // Assuming your courses are stored in a "courses" or "pro_course_questions" collection
+        // Adjust the collection name if yours is different in Firebase
+        db.collection("courses").get().addOnSuccessListener { result ->
+            val fetchedCourses = result.documents.mapNotNull { doc ->
+                val title = doc.getString("title") ?: doc.getString("name") ?: "Course"
+                val price = doc.getString("price") ?: "Free"
+                val keywords = doc.get("keywords") as? List<String> ?: emptyList()
+                CourseModel(doc.id, title, price, keywords)
+            }
+            courses = fetchedCourses
+            
+            // Extract unique keywords for dynamic categories
+            val extractedCategories = fetchedCourses.flatMap { it.keywords }.distinct()
+            categories = extractedCategories
+        }
+    }
+
+    // Categorize courses
+    val freeCourses = courses.filter { it.price.equals("free", ignoreCase = true) || it.price == "0" }
+    val proCourses = courses.filter { !it.price.equals("free", ignoreCase = true) && it.price != "0" }
+    // You would typically fetch purchased courses via a separate user-specific subcollection
+    val purchasedCourses = emptyList<CourseModel>() 
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                containerColor = Color.White,
                 modifier = Modifier.width(300.dp)
             ) {
-                // Drawer Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(ThemeBlue)
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountCircle, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(40.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("JCV HUB", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    }
-                    IconButton(onClick = { scope.launch { drawerState.close() } }) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                    }
-                }
-
+                // Background color applied directly to Column to fix containerColor error
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(Color.White)
                         .verticalScroll(rememberScrollState())
                 ) {
+                    // Drawer Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(ThemeBlue)
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AccountCircle, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(40.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("JCV HUB", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
+                        IconButton(onClick = { scope.launch { drawerState.close() } }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     NavigationDrawerItem(
@@ -99,31 +137,38 @@ fun MainDashboardScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Divider(modifier = Modifier.padding(vertical = 8.dp)) // Fixed HorizontalDivider
 
-                    // FREE COURSES SECTION
-                    DrawerSectionHeader("FREE COURSES", Icons.Default.CardGiftcard, Color(0xFF4CAF50))
-                    DrawerCourseItem("APTET ENGLISH")
-                    DrawerCourseItem("APTET TELUGU")
+                    // DYNAMIC FREE COURSES
+                    if (freeCourses.isNotEmpty()) {
+                        DrawerSectionHeader("FREE COURSES", Icons.Default.Star, Color(0xFF4CAF50))
+                        freeCourses.forEach { course ->
+                            DrawerCourseItem(course.title) { onNavigateToCourse(course.id) }
+                        }
+                    }
 
-                    // PURCHASED COURSES SECTION
-                    DrawerSectionHeader("PURCHASED COURSES", Icons.Default.MenuBook, Color(0xFF9C27B0))
-                    DrawerCourseItem("APTET CDP _ PSYCHOLOGY")
+                    // DYNAMIC PURCHASED COURSES (Placeholder for your logic)
+                    if (purchasedCourses.isNotEmpty()) {
+                        DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
+                        purchasedCourses.forEach { course ->
+                            DrawerCourseItem(course.title) { onNavigateToCourse(course.id) }
+                        }
+                    }
 
-                    // PRO COURSES SECTION
-                    DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
-                    DrawerCourseItem("AP EAPCET")
-                    DrawerCourseItem("APTET PSYCHOLOGY")
-                    DrawerCourseItem("APTET MATHS")
+                    // DYNAMIC PRO COURSES
+                    if (proCourses.isNotEmpty()) {
+                        DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
+                        proCourses.forEach { course ->
+                            DrawerCourseItem(course.title) { onNavigateToCourse(course.id) }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider()
+                    Divider()
                     
-                    // Profile & Logout Info at Bottom
+                    // Profile & Logout
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.Person, contentDescription = "User", modifier = Modifier.size(40.dp), tint = Color.Gray)
@@ -139,9 +184,7 @@ fun MainDashboardScreen(
                             auth.signOut()
                             onNavigateToLogin()
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
                     ) {
                         Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
@@ -162,7 +205,7 @@ fun MainDashboardScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { /* Notification Action */ }) {
+                        IconButton(onClick = { /* Notifications */ }) {
                             Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = Color.White)
                         }
                     },
@@ -184,7 +227,7 @@ fun MainDashboardScreen(
                     )
                     
                     NavigationBarItem(
-                        icon = { Icon(Icons.Outlined.CardGiftcard, contentDescription = "Free Courses") },
+                        icon = { Icon(Icons.Default.Star, contentDescription = "Free Courses") },
                         label = { Text("Free Courses", fontSize = 10.sp) },
                         selected = selectedTab == BottomTab.FREE_COURSES,
                         onClick = { selectedTab = BottomTab.FREE_COURSES },
@@ -200,7 +243,7 @@ fun MainDashboardScreen(
                     )
                     
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.MenuBook, contentDescription = "Purchased") },
+                        icon = { Icon(Icons.Default.List, contentDescription = "Purchased") },
                         label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
                         selected = selectedTab == BottomTab.PURCHASED_COURSES,
                         onClick = { 
@@ -215,17 +258,16 @@ fun MainDashboardScreen(
             Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(LightGreyBg)) {
                 when (selectedTab) {
                     BottomTab.HOME -> {
-                        DashboardHomeContent(onNavigateToCourse)
+                        DashboardHomeContent(categories, onNavigateToCourse)
                     }
                     BottomTab.FREE_COURSES -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Free Courses Screen") }
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Free Courses List") }
                     }
                     BottomTab.PRO_COURSES -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Pro Courses Screen") }
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Pro Courses List") }
                     }
                     BottomTab.PURCHASED_COURSES -> {
-                        // Your existing MyPurchasedTestsScreen logic goes here
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Purchased Courses Screen") }
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Purchased Courses List") }
                     }
                 }
             }
@@ -255,23 +297,23 @@ fun DrawerSectionHeader(title: String, icon: ImageVector, iconTint: Color) {
 }
 
 @Composable
-fun DrawerCourseItem(title: String) {
+fun DrawerCourseItem(title: String, onClick: () -> Unit) {
     Text(
         text = title,
         fontSize = 14.sp,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* Navigate */ }
+            .clickable { onClick() }
             .padding(horizontal = 40.dp, vertical = 10.dp)
     )
 }
 
 // ---------------------------------------------------------------------------
-// HOME TAB CONTENT (Image Slider & Grid)
+// HOME TAB CONTENT 
 // ---------------------------------------------------------------------------
 
 @Composable
-fun DashboardHomeContent(onNavigateToCourse: (String) -> Unit) {
+fun DashboardHomeContent(dynamicCategories: List<String>, onNavigateToCourse: (String) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -286,7 +328,7 @@ fun DashboardHomeContent(onNavigateToCourse: (String) -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Image, contentDescription = "Slider", tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(Icons.Default.PlayArrow, contentDescription = "Slider", tint = Color.White, modifier = Modifier.size(48.dp))
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Promotional Banner / Image Slider", color = Color.White)
             }
@@ -303,44 +345,34 @@ fun DashboardHomeContent(onNavigateToCourse: (String) -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Categories Grid
-        val categories = listOf(
-            CategoryData("LIVE MENTORSHIP", Icons.Default.Videocam),
-            CategoryData("AP TET/DSC", Icons.Default.School),
-            CategoryData("TG TET/DSC", Icons.Default.Public),
-            CategoryData("SI/PC COURSES", Icons.Default.LocalPolice),
-            CategoryData("GROUPS & OTHERS", Icons.Default.LibraryBooks),
-            CategoryData("BANK / SSC", Icons.Default.AccountBalance),
-            CategoryData("GK & CURRENT AFFAIRS", Icons.Default.Article),
-            CategoryData("TEST SERIES", Icons.Default.Quiz),
-            CategoryData("FREE CONTENT", Icons.Default.CardGiftcard)
-        )
+        // Fallback categories if Firebase returns nothing
+        val displayCategories = dynamicCategories.ifEmpty { 
+            listOf("ALL COURSES", "TET & DSC", "GENERAL EXAMS", "TEST SERIES") 
+        }
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.heightIn(max = 600.dp) // Bound the grid height inside scrollable column
+            modifier = Modifier.heightIn(max = 600.dp) // Bounds grid height
         ) {
-            items(categories) { category ->
-                CategoryCard(category)
+            items(displayCategories) { categoryTitle ->
+                CategoryCard(categoryTitle)
             }
         }
     }
 }
 
-data class CategoryData(val title: String, val icon: ImageVector)
-
 @Composable
-fun CategoryCard(category: CategoryData) {
+fun CategoryCard(title: String) {
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = ThemeBlue),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = Modifier
             .aspectRatio(0.9f)
-            .clickable { /* Handle Category Click */ }
+            .clickable { /* Handle Category Filter Click */ }
     ) {
         Column(
             modifier = Modifier
@@ -356,21 +388,23 @@ fun CategoryCard(category: CategoryData) {
                     .background(Color.White.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
+                // Using a generic list icon for dynamically fetched categories
                 Icon(
-                    imageVector = category.icon,
-                    contentDescription = category.title,
+                    imageVector = Icons.Default.List,
+                    contentDescription = title,
                     tint = Color.White,
                     modifier = Modifier.size(28.dp)
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = category.title,
+                text = title,
                 color = Color.White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                lineHeight = 14.sp
+                lineHeight = 14.sp,
+                maxLines = 2
             )
         }
     }
