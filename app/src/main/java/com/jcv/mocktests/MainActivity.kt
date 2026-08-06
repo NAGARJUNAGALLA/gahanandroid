@@ -28,32 +28,38 @@ class MainActivity : ComponentActivity() {
 fun MockTestsApp() {
     val navController = rememberNavController()
     
-    // NEW: Check Firebase Auth state to determine starting screen
     val auth = remember { FirebaseAuth.getInstance() }
     val currentUser = auth.currentUser
     
-    // CHANGE: Start at login if not authenticated, otherwise go to dashboard
-    val startDestination = if (currentUser != null) {
-        "main_dashboard/study_material"
-    } else {
-        "login"
-    }
+    // Always start at the splash screen
+    val startDestination = "splash"
 
     NavHost(navController = navController, startDestination = startDestination) {
         
+        composable("splash") {
+            SplashScreen(
+                onSplashFinished = {
+                    val nextRoute = if (currentUser != null) "main_dashboard/home" else "login"
+                    navController.navigate(nextRoute) {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                }
+            )
+        }
+
         // Dashboard Route handling tabs
         composable(
             route = "main_dashboard/{tab}",
             arguments = listOf(navArgument("tab") { type = NavType.StringType })
         ) { backStackEntry ->
-            val tab = backStackEntry.arguments?.getString("tab") ?: "study_material"
+            val tab = backStackEntry.arguments?.getString("tab") ?: "home"
             
             MainDashboardScreen(
                 initialTab = tab,
                 onNavigateToCourse = { courseId -> navController.navigate("course_details/$courseId") },
                 onNavigateToLogin = { 
                     navController.navigate("login") {
-                        popUpTo(0) // Clear backstack on logout
+                        popUpTo(0) 
                     }
                 }
             )
@@ -61,10 +67,9 @@ fun MockTestsApp() {
 
         composable("login") {
             AuthScreen(
-                // After successful login, route back to the Dashboard on the "tests" tab
                 onNavigateToHome = { 
-                    navController.navigate("main_dashboard/tests") { 
-                        popUpTo(0) // Clear the backstack so they don't hit the login screen again by pressing back
+                    navController.navigate("main_dashboard/home") { 
+                        popUpTo(0) 
                     } 
                 },
                 onNavigateToSignup = { navController.navigate("signup") }
@@ -74,7 +79,7 @@ fun MockTestsApp() {
         composable("signup") {
             SignupScreen(
                 onNavigateToHome = { 
-                    navController.navigate("main_dashboard/tests") { popUpTo(0) } 
+                    navController.navigate("main_dashboard/home") { popUpTo(0) } 
                 },
                 onNavigateToLogin = { 
                     navController.navigate("login") { popUpTo("signup") { inclusive = true } } 
@@ -90,9 +95,8 @@ fun MockTestsApp() {
                     val encodedTestName = URLEncoder.encode(testName, "UTF-8")
                     navController.navigate("exam/$cId/$encodedTestName/$isReviewMode") 
                 },
-                // Route to the study material tab in the dashboard
                 onNavigateToStudyMaterial = { 
-                    navController.navigate("main_dashboard/study_material") { popUpTo(0) }
+                    navController.navigate("main_dashboard/home") { popUpTo(0) }
                 },
                 onNavigateBack = { navController.popBackStack() }
             )
@@ -116,7 +120,7 @@ fun MockTestsApp() {
                 isReviewMode = isReviewMode,
                 onFinalSubmit = { score, total -> 
                     navController.navigate("results/$score/$total") { 
-                        popUpTo("main_dashboard/tests") 
+                        popUpTo("main_dashboard/home") 
                     }
                 },
                 onExitReview = {
@@ -132,7 +136,7 @@ fun MockTestsApp() {
                 score = score,
                 totalQuestions = total,
                 onNavigateHome = { 
-                    navController.navigate("main_dashboard/tests") { popUpTo(0) } 
+                    navController.navigate("main_dashboard/home") { popUpTo(0) } 
                 }
             )
         }
