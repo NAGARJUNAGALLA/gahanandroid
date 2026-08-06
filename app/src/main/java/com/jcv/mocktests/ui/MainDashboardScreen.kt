@@ -11,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,9 +31,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
 
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
 
@@ -100,10 +102,28 @@ fun MainDashboardScreen(
     var showPaymentDialog by remember { mutableStateOf<CourseModel?>(null) }
     var isSubmittingPayment by remember { mutableStateOf(false) }
 
+    // Merchant Settings
+    var upiId by remember { mutableStateOf("") }
+    var merchantName by remember { mutableStateOf("JCV MOCK TESTS") }
+    var staticQrUrl by remember { mutableStateOf("") }
+
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        // 1. FAST LOAD FROM LOCAL CACHE
+        val db = FirebaseFirestore.getInstance()
+        val uid = auth.currentUser?.uid
+
+        // 1. Fetch Merchant Settings for QR Code
+        db.collection("settings").get().addOnSuccessListener { settingsSnap ->
+            if (!settingsSnap.isEmpty) {
+                val sData = settingsSnap.documents[0]
+                upiId = sData.getString("upiId") ?: sData.getString("upi_id") ?: ""
+                merchantName = sData.getString("merchantName") ?: sData.getString("merchant_name") ?: "JCV MOCK TESTS"
+                staticQrUrl = sData.getString("qrCodeLink") ?: sData.getString("qr_code_link") ?: sData.getString("qrcode") ?: ""
+            }
+        }
+
+        // 2. Load Local Cache
         val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
         val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
         val cachedPendingStr = prefs.getString("cached_pending", "") ?: ""
@@ -128,10 +148,7 @@ fun MainDashboardScreen(
             isLoading = false
         }
 
-        // 2. BACKGROUND FETCH FROM FIREBASE
-        val db = FirebaseFirestore.getInstance()
-        val uid = auth.currentUser?.uid
-
+        // 3. Background Fetch Courses
         db.collection("exams").document("testList").get().addOnSuccessListener { examDoc ->
             val testsArray = examDoc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             
@@ -202,6 +219,9 @@ fun MainDashboardScreen(
             course = course,
             isRejected = rejectedSheetIds.contains(course.sheetId),
             isSubmitting = isSubmittingPayment,
+            upiId = upiId,
+            merchantName = merchantName,
+            staticQrUrl = staticQrUrl,
             onDismiss = { showPaymentDialog = null },
             onSubmit = { app, utr ->
                 isSubmittingPayment = true
@@ -410,7 +430,7 @@ fun MainDashboardScreen(
 }
 
 // ---------------------------------------------------------------------------
-// PAYMENT MODAL DIALOG
+// PAYMENT MODAL DIALOG (WITH LIVE QR)
 // ---------------------------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -418,6 +438,9 @@ fun PaymentDialog(
     course: CourseModel,
     isRejected: Boolean,
     isSubmitting: Boolean,
+    upiId: String,
+    merchantName: String,
+    staticQrUrl: String,
     onDismiss: () -> Unit,
     onSubmit: (String, String) -> Unit
 ) {
@@ -425,6 +448,16 @@ fun PaymentDialog(
     var expanded by remember { mutableStateOf(false) }
     var utr by remember { mutableStateOf("") }
     val apps = listOf("PhonePe", "Google Pay (GPay)", "Paytm", "Other")
+
+    // Generate Dynamic QR URL
+    val qrUrl = remember(upiId, staticQrUrl, course.fee) {
+        if (upiId.isNotBlank()) {
+            val upiString = "upi://pay?pa=$upiId&pn=${URLEncoder.encode(merchantName, "UTF-8")}&am=${course.fee}&cu=INR"
+            "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${URLEncoder.encode(upiString, "UTF-8")}"
+        } else {
+            staticQrUrl
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isSubmitting) onDismiss() },
@@ -465,7 +498,7 @@ fun PaymentDialog(
                     fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 8.dp)
                 )
                 
-                // QR Code Placeholder
+                // ACTUAL QR CODE
                 Box(
                     modifier = Modifier
                         .size(160.dp)
@@ -473,17 +506,26 @@ fun PaymentDialog(
                         .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Search, contentDescription = "QR", modifier = Modifier.size(40.dp), tint = Color.LightGray)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("UPI QR CODE", fontWeight = FontWeight.Bold, color = Color.Gray, fontSize = 12.sp)
-                        Text("Pay ₹${course.fee.toInt()}", color = ThemeBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (qrUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(qrUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "UPI QR Code",
+                            modifier = Modifier.padding(8.dp).fillMaxSize()
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = ThemeBlue, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Loading QR...", fontSize = 12.sp, color = Color.Gray)
+                        }
                     }
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // UPI App Dropdown
                 ExposedDropdownMenuBox(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
@@ -607,10 +649,6 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
     )
 }
 
-// ---------------------------------------------------------------------------
-// HOME TAB CONTENT - PROFILE CARD & PASTEL CATEGORY GRID
-// ---------------------------------------------------------------------------
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardHomeContent(
@@ -727,9 +765,6 @@ fun DashboardHomeContent(
     }
 }
 
-// ---------------------------------------------------------------------------
-// PROFILE HEADER COMPONENT
-// ---------------------------------------------------------------------------
 @Composable
 fun UserProfileHeader(auth: FirebaseAuth) {
     val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
@@ -768,9 +803,6 @@ fun UserProfileHeader(auth: FirebaseAuth) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// PASTEL CATEGORY CARD DESIGN
-// ---------------------------------------------------------------------------
 @Composable
 fun PastelCategoryCard(
     title: String,
@@ -812,9 +844,6 @@ fun PastelCategoryCard(
     }
 }
 
-// ---------------------------------------------------------------------------
-// INDIVIDUAL COURSE CARD DESIGN (Now with Pastel Colors!)
-// ---------------------------------------------------------------------------
 @Composable
 fun CourseGridScreen(title: String, courses: List<CourseModel>, onCourseClick: (CourseModel) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
