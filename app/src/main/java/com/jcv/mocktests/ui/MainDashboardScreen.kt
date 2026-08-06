@@ -1,12 +1,15 @@
 package com.jcv.mocktests.ui
 
+import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,9 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -36,12 +39,15 @@ val LightGreyBg = Color(0xFFF5F6FA)
 val GoldColor = Color(0xFFFFC107)
 val RedBadgeColor = Color(0xFFE53935)
 
-// Blue Gradient for Category Cards
-val CardBlueGradient = Brush.verticalGradient(
-    colors = listOf(
-        Color(0xFF64B5F6), // Lighter blue at the top
-        Color(0xFF1565C0)  // Darker theme blue at the bottom
-    )
+// Pastel Colors for the Category Grid
+val PastelColors = listOf(
+    Color(0xFFFFF3E0), // Soft Peach
+    Color(0xFFFCE4EC), // Soft Pink
+    Color(0xFFF0F4C3), // Soft Lime/Yellow
+    Color(0xFFD7CCC8), // Soft Brown/Grey
+    Color(0xFFF3E5F5), // Soft Lavender
+    Color(0xFFE8F5E9), // Soft Mint
+    Color(0xFFE0F7FA)  // Soft Cyan
 )
 
 data class CourseModel(
@@ -96,7 +102,7 @@ fun MainDashboardScreen(
                 val feeString = map["fee"]?.toString() ?: "0"
                 val fee = feeString.toDoubleOrNull() ?: 0.0
                 val sheetId = map["sheetId"] as? String ?: ""
-                val topic = "OTHERS" // Kept for generic mapping if needed
+                val topic = "OTHERS"
                 
                 CourseModel(sheetId, title, fee, topic)
             }
@@ -279,13 +285,13 @@ fun MainDashboardScreen(
                 }
             }
         ) { paddingValues ->
-            Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(LightGreyBg)) {
+            Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(Color(0xFFE9F0EA))) { // Slightly off-white background matching the image
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = ThemeBlue)
                 } else {
                     when (selectedTab) {
                         BottomTab.HOME -> {
-                            DashboardHomeContent(allCourses, freeCourses, purchasedCourses, proCourses, onNavigateToCourse)
+                            DashboardHomeContent(allCourses, freeCourses, purchasedCourses, proCourses, auth, onNavigateToCourse)
                         }
                         BottomTab.FREE_COURSES -> {
                             CourseGridScreen("Free Courses", freeCourses, onNavigateToCourse)
@@ -340,7 +346,7 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// HOME TAB CONTENT - CATEGORIES GRID OR COURSE LIST
+// HOME TAB CONTENT - PROFILE CARD & PASTEL CATEGORY GRID
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -349,35 +355,59 @@ fun DashboardHomeContent(
     freeCourses: List<CourseModel>,
     purchasedCourses: List<CourseModel>,
     proCourses: List<CourseModel>,
+    auth: FirebaseAuth,
     onNavigateToCourse: (String) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     
-    // The specific categories requested
     val homeCategories = listOf(
         "Free Courses", "Pro Courses", "Purchased", 
         "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET"
     )
+    
+    // Assigning relevant core icons for each category
+    val categoryIcons = listOf(
+        Icons.Default.CheckCircle, 
+        Icons.Default.Star, 
+        Icons.Default.List, 
+        Icons.Default.Edit, 
+        Icons.Default.AccountBalance, 
+        Icons.Default.Build, 
+        Icons.Default.DateRange
+    )
 
     if (selectedCategory == null) {
-        // STATE 1: SHOW CATEGORY CARDS
+        // STATE 1: SHOW PROFILE AND CATEGORY CARDS
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            
+            // 1. Profile Header Card
+            UserProfileHeader(auth)
+            
+            // 2. Action Plan / Marquee Text Simulator
             Text(
-                text = "What are you looking for?",
+                text = "Day-Wise Schedule of the JCV Mock Tests Action Plan 2026-27",
+                color = Color(0xFFE53935),
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = Color.DarkGray,
-                modifier = Modifier.padding(bottom = 16.dp)
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
             )
 
+            // 3. Pastel Grid Categories
             LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
+                columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(homeCategories) { categoryName ->
-                    CategoryGradientCard(title = categoryName) {
+                itemsIndexed(homeCategories) { index, categoryName ->
+                    PastelCategoryCard(
+                        title = categoryName,
+                        icon = categoryIcons[index % categoryIcons.size],
+                        backgroundColor = PastelColors[index % PastelColors.size]
+                    ) {
                         selectedCategory = categoryName
                     }
                 }
@@ -405,7 +435,6 @@ fun DashboardHomeContent(
         }
 
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            // Header with Back Button
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -446,37 +475,98 @@ fun DashboardHomeContent(
 }
 
 // ---------------------------------------------------------------------------
-// GRADIENT CATEGORY CARD DESIGN
+// PROFILE HEADER COMPONENT
 // ---------------------------------------------------------------------------
 @Composable
-fun CategoryGradientCard(title: String, onClick: () -> Unit) {
+fun UserProfileHeader(auth: FirebaseAuth) {
+    val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Profile Image Placeholder
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .background(Color.LightGray, RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Person, contentDescription = "Profile", modifier = Modifier.size(50.dp), tint = Color.White)
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            // Details aligned to end
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(userName, fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.Black)
+                Text("COURSE ASPIRANT", fontSize = 12.sp, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp))
+                Text("MPL PS (G) RUSTUM BADA", fontSize = 12.sp, color = Color.DarkGray)
+                Text("ID: 202627001", fontSize = 12.sp, color = Color.DarkGray)
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PASTEL CATEGORY CARD DESIGN
+// ---------------------------------------------------------------------------
+@Composable
+fun PastelCategoryCard(
+    title: String,
+    icon: ImageVector,
+    backgroundColor: Color,
+    onClick: () -> Unit
+) {
     Card(
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
-            .aspectRatio(0.9f)
+            .height(110.dp)
             .clickable { onClick() }
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(brush = CardBlueGradient),
-            contentAlignment = Alignment.Center
+                .padding(16.dp)
         ) {
+            // Top Left Icon inside a white circle
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color.White, CircleShape)
+                    .align(Alignment.TopStart),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = title, tint = Color.Black, modifier = Modifier.size(20.dp))
+            }
+            
+            // Bottom Right Text
             Text(
-                text = title.uppercase(),
-                color = Color.White,
+                text = title,
+                color = Color.Black,
                 fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(8.dp)
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.End,
+                modifier = Modifier.align(Alignment.BottomEnd)
             )
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// INDIVIDUAL COURSE CARD DESIGN 
+// INDIVIDUAL COURSE CARD DESIGN (With Share Option)
 // ---------------------------------------------------------------------------
 @Composable
 fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCourse: (String) -> Unit) {
@@ -501,11 +591,15 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
     val originalPrice = if (!isFree) course.fee * 1.5 else 0.0 
     
+    val context = LocalContext.current
+    
     Card(
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.clickable { onClick() }.fillMaxWidth()
+        modifier = Modifier
+            .clickable { onClick() }
+            .fillMaxWidth()
     ) {
         Column {
             Box(
@@ -537,11 +631,38 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
                     modifier = Modifier.height(32.dp)
                 )
                 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(), 
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.ThumbUp, contentDescription = "Likes", tint = RedBadgeColor, modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("100+", fontSize = 10.sp, color = Color.Gray)
+                    }
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    IconButton(
+                        onClick = {
+                            val shareText = "Check out this amazing course: ${course.title} on the JCV Mock Tests App!"
+                            val sendIntent: Intent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                                type = "text/plain"
+                            }
+                            val shareIntent = Intent.createChooser(sendIntent, "Share Course via")
+                            context.startActivity(shareIntent)
+                        },
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Share, 
+                            contentDescription = "Share Course", 
+                            tint = ThemeBlue, 
+                            modifier = Modifier.size(14.dp)
+                        )
                     }
                 }
                 
