@@ -2,6 +2,7 @@ package com.jcv.mocktests.ui
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -92,12 +93,21 @@ fun MainDashboardScreen(
     var freeCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var proCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var purchasedCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+    
+    // Payment Tracking States
+    var pendingSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var rejectedSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showPaymentDialog by remember { mutableStateOf<CourseModel?>(null) }
+    var isSubmittingPayment by remember { mutableStateOf(false) }
+
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         // 1. FAST LOAD FROM LOCAL CACHE
         val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
         val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
+        val cachedPendingStr = prefs.getString("cached_pending", "") ?: ""
+        val cachedRejectedStr = prefs.getString("cached_rejected", "") ?: ""
         
         if (cachedCoursesStr.isNotEmpty()) {
             val parsedCourses = cachedCoursesStr.split("|||").mapNotNull {
@@ -107,6 +117,8 @@ fun MainDashboardScreen(
                 } else null
             }
             val approvedSheetIds = cachedPurchasedStr.split(",").filter { it.isNotBlank() }
+            pendingSheetIds = cachedPendingStr.split(",").filter { it.isNotBlank() }
+            rejectedSheetIds = cachedRejectedStr.split(",").filter { it.isNotBlank() }
             
             allCourses = parsedCourses
             freeCourses = parsedCourses.filter { it.fee == 0.0 }
@@ -129,7 +141,6 @@ fun MainDashboardScreen(
                 val fee = feeString.toDoubleOrNull() ?: 0.0
                 val sheetId = map["sheetId"] as? String ?: ""
                 val topic = "OTHERS"
-                
                 CourseModel(sheetId, title, fee, topic)
             }
 
@@ -142,6 +153,8 @@ fun MainDashboardScreen(
                     }
                     
                     val approvedSheetIds = payments.filter { it.status == "approved" }.map { it.sheetId }
+                    pendingSheetIds = payments.filter { it.status == "pending" }.map { it.sheetId }
+                    rejectedSheetIds = payments.filter { it.status == "rejected" }.map { it.sheetId }
                     
                     allCourses = fetchedCourses
                     freeCourses = fetchedCourses.filter { it.fee == 0.0 }
@@ -153,6 +166,8 @@ fun MainDashboardScreen(
                     prefs.edit()
                         .putString("cached_courses", coursesString)
                         .putString("cached_purchased", approvedSheetIds.joinToString(","))
+                        .putString("cached_pending", pendingSheetIds.joinToString(","))
+                        .putString("cached_rejected", rejectedSheetIds.joinToString(","))
                         .apply()
                 }
             } else {
@@ -168,6 +183,57 @@ fun MainDashboardScreen(
                     .apply()
             }
         }
+    }
+
+    // INTERCEPT CLICKS AND MANAGE PAYMENTS
+    val handleCourseClick: (CourseModel) -> Unit = { course ->
+        if (course.fee == 0.0 || purchasedCourses.any { it.sheetId == course.sheetId }) {
+            onNavigateToCourse(course.sheetId)
+        } else if (pendingSheetIds.contains(course.sheetId)) {
+            Toast.makeText(context, "Your payment is currently under review by the admin. Please check back later.", Toast.LENGTH_LONG).show()
+        } else {
+            showPaymentDialog = course
+        }
+    }
+
+    // PAYMENT MODAL OVERLAY
+    showPaymentDialog?.let { course ->
+        PaymentDialog(
+            course = course,
+            isRejected = rejectedSheetIds.contains(course.sheetId),
+            isSubmitting = isSubmittingPayment,
+            onDismiss = { showPaymentDialog = null },
+            onSubmit = { app, utr ->
+                isSubmittingPayment = true
+                val docId = "${auth.currentUser?.uid}_${course.title}"
+                
+                val paymentData = hashMapOf(
+                    "uid" to auth.currentUser?.uid,
+                    "email" to auth.currentUser?.email,
+                    "sheetId" to course.sheetId,
+                    "courseTitle" to course.title,
+                    "fee" to course.fee,
+                    "utr" to utr,
+                    "app" to app,
+                    "status" to "pending",
+                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+
+                FirebaseFirestore.getInstance().collection("pending_registrations")
+                    .document(docId)
+                    .set(paymentData)
+                    .addOnSuccessListener {
+                        isSubmittingPayment = false
+                        showPaymentDialog = null
+                        pendingSheetIds = pendingSheetIds + course.sheetId
+                        Toast.makeText(context, "Payment details submitted successfully!", Toast.LENGTH_LONG).show()
+                    }
+                    .addOnFailureListener { e ->
+                        isSubmittingPayment = false
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+            }
+        )
     }
 
     ModalNavigationDrawer(
@@ -208,21 +274,21 @@ fun MainDashboardScreen(
                     if (freeCourses.isNotEmpty()) {
                         DrawerSectionHeader("FREE COURSES", Icons.Default.Star, Color(0xFF4CAF50))
                         freeCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) }
+                            DrawerCourseItem(course.title) { handleCourseClick(course) }
                         }
                     }
 
                     if (purchasedCourses.isNotEmpty()) {
                         DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
                         purchasedCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) }
+                            DrawerCourseItem(course.title) { handleCourseClick(course) }
                         }
                     }
 
                     if (proCourses.isNotEmpty()) {
                         DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
                         proCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) }
+                            DrawerCourseItem(course.title) { handleCourseClick(course) }
                         }
                     }
 
@@ -322,25 +388,168 @@ fun MainDashboardScreen(
                             proCourses = proCourses,
                             auth = auth,
                             isLoading = isLoading,
-                            onNavigateToCourse = onNavigateToCourse
+                            onCourseClick = handleCourseClick
                         )
                     }
                     BottomTab.FREE_COURSES -> {
                         if (isLoading && freeCourses.isEmpty()) LoadingLogo() 
-                        else CourseGridScreen("Free Courses", freeCourses, onNavigateToCourse)
+                        else CourseGridScreen("Free Courses", freeCourses, handleCourseClick)
                     }
                     BottomTab.PRO_COURSES -> {
                         if (isLoading && proCourses.isEmpty()) LoadingLogo() 
-                        else CourseGridScreen("Pro Courses", proCourses, onNavigateToCourse)
+                        else CourseGridScreen("Pro Courses", proCourses, handleCourseClick)
                     }
                     BottomTab.PURCHASED_COURSES -> {
                         if (isLoading && purchasedCourses.isEmpty()) LoadingLogo() 
-                        else CourseGridScreen("Purchased Courses", purchasedCourses, onNavigateToCourse)
+                        else CourseGridScreen("Purchased Courses", purchasedCourses, handleCourseClick)
                     }
                 }
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// PAYMENT MODAL DIALOG
+// ---------------------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PaymentDialog(
+    course: CourseModel,
+    isRejected: Boolean,
+    isSubmitting: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (String, String) -> Unit
+) {
+    var selectedApp by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    var utr by remember { mutableStateOf("") }
+    val apps = listOf("PhonePe", "Google Pay (GPay)", "Paytm", "Other")
+
+    AlertDialog(
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        containerColor = Color.White,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Unlock Course", fontWeight = FontWeight.Bold, color = ThemeBlue, fontSize = 18.sp)
+                IconButton(onClick = onDismiss, enabled = !isSubmitting) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("₹${course.fee.toInt()}", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color.DarkGray)
+                
+                if (isRejected) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), 
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Your previous registration was rejected. Please pay the fee or check your UTR number and resend.",
+                            color = Color(0xFFC62828), fontSize = 12.sp, modifier = Modifier.padding(8.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                
+                Text(
+                    "Scan the QR code below to pay. If already paid, submit your UTR.",
+                    fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 8.dp)
+                )
+                
+                // QR Code Placeholder
+                Box(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .background(Color(0xFFF5F6FA), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Search, contentDescription = "QR", modifier = Modifier.size(40.dp), tint = Color.LightGray)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("UPI QR CODE", fontWeight = FontWeight.Bold, color = Color.Gray, fontSize = 12.sp)
+                        Text("Pay ₹${course.fee.toInt()}", color = ThemeBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // UPI App Dropdown
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedApp,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Paid using app") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ThemeBlue,
+                            focusedLabelColor = ThemeBlue
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.background(Color.White)
+                    ) {
+                        apps.forEach { app ->
+                            DropdownMenuItem(
+                                text = { Text(app) },
+                                onClick = {
+                                    selectedApp = app
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = utr,
+                    onValueChange = { utr = it },
+                    label = { Text("Transaction / UTR Number") },
+                    placeholder = { Text("e.g. 123456789012") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ThemeBlue,
+                        focusedLabelColor = ThemeBlue
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(selectedApp, utr) },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                enabled = selectedApp.isNotBlank() && utr.isNotBlank() && !isSubmitting,
+                colors = ButtonDefaults.buttonColors(containerColor = ThemeBlue),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (isSubmitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+        },
+        dismissButton = null
+    )
 }
 
 @Composable
@@ -411,7 +620,7 @@ fun DashboardHomeContent(
     proCourses: List<CourseModel>,
     auth: FirebaseAuth,
     isLoading: Boolean,
-    onNavigateToCourse: (String) -> Unit
+    onCourseClick: (CourseModel) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     
@@ -506,12 +715,11 @@ fun DashboardHomeContent(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // APPLY PASTEL COLORS TO COURSE CARDS HERE
                     itemsIndexed(displayedCourses) { index, course ->
                         CourseCardView(
                             course = course, 
                             backgroundColor = PastelColors[index % PastelColors.size]
-                        ) { onNavigateToCourse(course.sheetId) }
+                        ) { onCourseClick(course) }
                     }
                 }
             }
@@ -608,7 +816,7 @@ fun PastelCategoryCard(
 // INDIVIDUAL COURSE CARD DESIGN (Now with Pastel Colors!)
 // ---------------------------------------------------------------------------
 @Composable
-fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCourse: (String) -> Unit) {
+fun CourseGridScreen(title: String, courses: List<CourseModel>, onCourseClick: (CourseModel) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("$title (${courses.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
         Spacer(modifier = Modifier.height(12.dp))
@@ -618,12 +826,11 @@ fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCour
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            // APPLY PASTEL COLORS TO COURSE CARDS HERE
             itemsIndexed(courses) { index, course ->
                 CourseCardView(
                     course = course,
                     backgroundColor = PastelColors[index % PastelColors.size]
-                ) { onNavigateToCourse(course.sheetId) }
+                ) { onCourseClick(course) }
             }
         }
     }
@@ -639,13 +846,12 @@ fun CourseCardView(course: CourseModel, backgroundColor: Color, onClick: () -> U
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), // Flat design fits pastels better
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .clickable { onClick() }
             .fillMaxWidth()
     ) {
         Column {
-            // Header box with translucent white to blend with the pastel background
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
