@@ -214,47 +214,149 @@ fun MainDashboardScreen(
     }
 
     // PAYMENT MODAL OVERLAY
-    showPaymentDialog?.let { course ->
-        PaymentDialog(
-            course = course,
-            isRejected = rejectedSheetIds.contains(course.sheetId),
-            isSubmitting = isSubmittingPayment,
-            upiId = upiId,
-            merchantName = merchantName,
-            staticQrUrl = staticQrUrl,
-            onDismiss = { showPaymentDialog = null },
-            onSubmit = { app, utr ->
-                isSubmittingPayment = true
-                val docId = "${auth.currentUser?.uid}_${course.title}"
+    // ---------------------------------------------------------------------------
+// PAYMENT MODAL DIALOG (DIRECT APP INTENT)
+// ---------------------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PaymentDialog(
+    course: CourseModel,
+    isRejected: Boolean,
+    isSubmitting: Boolean,
+    upiId: String,
+    merchantName: String,
+    onDismiss: () -> Unit,
+    onSubmit: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    var utr by remember { mutableStateOf("") }
+    
+    // State to track if the user has clicked "Pay Now" yet
+    var hasClickedPay by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        containerColor = Color.White,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Unlock Course", fontWeight = FontWeight.Bold, color = ThemeBlue, fontSize = 18.sp)
+                IconButton(onClick = onDismiss, enabled = !isSubmitting) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("₹${course.fee.toInt()}", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color.DarkGray)
                 
-                val paymentData = hashMapOf(
-                    "uid" to auth.currentUser?.uid,
-                    "email" to auth.currentUser?.email,
-                    "sheetId" to course.sheetId,
-                    "courseTitle" to course.title,
-                    "fee" to course.fee,
-                    "utr" to utr,
-                    "app" to app,
-                    "status" to "pending",
-                    "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                if (isRejected) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), 
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Your previous registration was rejected. Please pay the fee or check your UTR number and resend.",
+                            color = Color(0xFFC62828), fontSize = 12.sp, modifier = Modifier.padding(8.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // DIRECT "PAY NOW" BUTTON
+                Button(
+                    onClick = {
+                        if (upiId.isNotBlank()) {
+                            // 1. Generate the UPI intent URL
+                            val uriString = "upi://pay?pa=$upiId&pn=${java.net.URLEncoder.encode(merchantName, "UTF-8")}&am=${course.fee}&cu=INR"
+                            val uri = android.net.Uri.parse(uriString)
+                            val intent = Intent(Intent.ACTION_VIEW, uri)
+                            
+                            // 2. Ask Android to show installed UPI apps (GPay, PhonePe, etc.)
+                            val chooser = Intent.createChooser(intent, "Pay securely with")
+                            
+                            try {
+                                context.startActivity(chooser)
+                                // 3. Reveal the UTR input box
+                                hasClickedPay = true
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No UPI app found on your phone. Please install GPay, PhonePe, or Paytm.", Toast.LENGTH_LONG).show()
+                                hasClickedPay = true // Fallback to let them enter it manually if needed
+                            }
+                        } else {
+                            Toast.makeText(context, "UPI ID is not configured. Please contact the Admin.", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), // Green color for the Pay button
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("PAY NOW", fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Click to open GPay, PhonePe, Paytm, or any UPI App",
+                    fontSize = 10.sp, color = Color.Gray, textAlign = TextAlign.Center
                 )
 
-                FirebaseFirestore.getInstance().collection("pending_registrations")
-                    .document(docId)
-                    .set(paymentData)
-                    .addOnSuccessListener {
-                        isSubmittingPayment = false
-                        showPaymentDialog = null
-                        pendingSheetIds = pendingSheetIds + course.sheetId
-                        Toast.makeText(context, "Payment details submitted successfully!", Toast.LENGTH_LONG).show()
-                    }
-                    .addOnFailureListener { e ->
-                        isSubmittingPayment = false
-                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
+                // ONLY SHOW THIS SECTION AFTER THEY CLICK "PAY NOW"
+                if (hasClickedPay) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Divider(color = Color.LightGray, thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text(
+                        text = "After successful payment, enter the 12-digit UTR/Reference number below to verify.",
+                        fontSize = 12.sp, color = ThemeBlue, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = utr,
+                        onValueChange = { utr = it },
+                        label = { Text("Transaction / UTR Number") },
+                        placeholder = { Text("e.g. 123456789012") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ThemeBlue,
+                            focusedLabelColor = ThemeBlue
+                        )
+                    )
+                }
             }
-        )
-    }
+        },
+        confirmButton = {
+            // ONLY SHOW THE SUBMIT BUTTON AFTER THEY CLICK "PAY NOW"
+            if (hasClickedPay) {
+                Button(
+                    onClick = { onSubmit("Direct UPI", utr) }, // App type is hardcoded since they use the direct intent
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    enabled = utr.isNotBlank() && !isSubmitting,
+                    colors = ButtonDefaults.buttonColors(containerColor = ThemeBlue),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+        },
+        dismissButton = null
+    )
+}
 
     ModalNavigationDrawer(
         drawerState = drawerState,
