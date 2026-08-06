@@ -2,6 +2,7 @@ package com.jcv.mocktests.ui
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -285,7 +286,8 @@ fun MainDashboardScreen(
                 }
             }
         ) { paddingValues ->
-            Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(Color(0xFFE9F0EA))) { // Slightly off-white background matching the image
+            // Background is now completely White
+            Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(Color.White)) { 
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = ThemeBlue)
                 } else {
@@ -362,39 +364,30 @@ fun DashboardHomeContent(
     
     val homeCategories = listOf(
         "Free Courses", "Pro Courses", "Purchased", 
-        "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET","Banking","SSC"
-    )
-    
-    val categoryIcons = listOf(
-        Icons.Default.CheckCircle, 
-        Icons.Default.Star, 
-        Icons.Default.List, 
-        Icons.Default.Edit, 
-        Icons.Default.Person,   
-        Icons.Default.Settings, 
-        Icons.Default.Info      
+        "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET"
     )
 
     if (selectedCategory == null) {
         // STATE 1: SHOW PROFILE AND CATEGORY CARDS
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             
-            // 1. Profile Header Card
+            // 1. Simplified Profile Header Card
             UserProfileHeader(auth)
             
-            // 2. Action Plan / Marquee Text Simulator
+            // 2. Scrolling Marquee Text
             Text(
-                text = "Day-Wise Schedule of the JCV Mock Tests Action Plan 2026-27",
-                color = Color(0xFFE53935),
+                text = "Welcome to JCV MOCK Tests and Thanks for Choosing JCV MOCK TESTS",
+                color = ThemeBlue,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
+                maxLines = 1,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)
+                    .basicMarquee() // Native compose scrolling effect
             )
 
-            // 3. Pastel Grid Categories
+            // 3. Pastel Grid Categories with Emoji
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -404,7 +397,6 @@ fun DashboardHomeContent(
                 itemsIndexed(homeCategories) { index, categoryName ->
                     PastelCategoryCard(
                         title = categoryName,
-                        icon = categoryIcons[index % categoryIcons.size],
                         backgroundColor = PastelColors[index % PastelColors.size]
                     ) {
                         selectedCategory = categoryName
@@ -479,10 +471,11 @@ fun DashboardHomeContent(
 @Composable
 fun UserProfileHeader(auth: FirebaseAuth) {
     val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
+    val mobileNumber = auth.currentUser?.phoneNumber ?: "Mobile Number Not Set"
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = Color.White), // Ensured this is white as well
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -503,15 +496,13 @@ fun UserProfileHeader(auth: FirebaseAuth) {
             
             Spacer(modifier = Modifier.width(16.dp))
             
-            // Details aligned to end
+            // Details aligned to end - Keeping only Name and Mobile
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.End
             ) {
                 Text(userName, fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.Black)
-                Text("COURSE ASPIRANT", fontSize = 12.sp, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp))
-                Text("MPL PS (G) RUSTUM BADA", fontSize = 12.sp, color = Color.DarkGray)
-                Text("ID: 202627001", fontSize = 12.sp, color = Color.DarkGray)
+                Text(mobileNumber, fontSize = 12.sp, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
@@ -523,7 +514,6 @@ fun UserProfileHeader(auth: FirebaseAuth) {
 @Composable
 fun PastelCategoryCard(
     title: String,
-    icon: ImageVector,
     backgroundColor: Color,
     onClick: () -> Unit
 ) {
@@ -540,7 +530,7 @@ fun PastelCategoryCard(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Top Left Icon inside a white circle
+            // Top Left Icon inside a white circle using standard text emoji
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -548,7 +538,7 @@ fun PastelCategoryCard(
                     .align(Alignment.TopStart),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = title, tint = Color.Black, modifier = Modifier.size(20.dp))
+                Text("🎓", fontSize = 18.sp)
             }
             
             // Bottom Right Text
