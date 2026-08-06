@@ -1,8 +1,8 @@
 package com.jcv.mocktests.ui
 
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
@@ -25,7 +25,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -34,15 +33,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.jcv.mocktests.R
 import kotlinx.coroutines.launch
 
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
 
 val ThemeBlue = Color(0xFF1976D2)
-val ThemeDarkBlue = Color(0xFF181E2F)
 val LightGreyBg = Color(0xFFF5F6FA)
-val GoldColor = Color(0xFFFFC107)
 val RedBadgeColor = Color(0xFFE53935)
 
 val PastelColors = listOf(
@@ -85,6 +81,9 @@ fun MainDashboardScreen(
         )
     }
 
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
+    
     val auth = FirebaseAuth.getInstance()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -96,6 +95,28 @@ fun MainDashboardScreen(
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
+        // 1. FAST LOAD FROM LOCAL CACHE
+        val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
+        val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
+        
+        if (cachedCoursesStr.isNotEmpty()) {
+            val parsedCourses = cachedCoursesStr.split("|||").mapNotNull {
+                val parts = it.split("|")
+                if (parts.size >= 4) {
+                    CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3])
+                } else null
+            }
+            val approvedSheetIds = cachedPurchasedStr.split(",").filter { it.isNotBlank() }
+            
+            allCourses = parsedCourses
+            freeCourses = parsedCourses.filter { it.fee == 0.0 }
+            purchasedCourses = parsedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
+            proCourses = parsedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
+            
+            isLoading = false
+        }
+
+        // 2. BACKGROUND FETCH FROM FIREBASE
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
@@ -126,15 +147,25 @@ fun MainDashboardScreen(
                     freeCourses = fetchedCourses.filter { it.fee == 0.0 }
                     purchasedCourses = fetchedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
                     proCourses = fetchedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
-                    
                     isLoading = false
+                    
+                    val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}" }
+                    prefs.edit()
+                        .putString("cached_courses", coursesString)
+                        .putString("cached_purchased", approvedSheetIds.joinToString(","))
+                        .apply()
                 }
             } else {
                 allCourses = fetchedCourses
                 freeCourses = fetchedCourses.filter { it.fee == 0.0 }
                 proCourses = fetchedCourses.filter { it.fee > 0.0 }
-                
                 isLoading = false
+                
+                val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}" }
+                prefs.edit()
+                    .putString("cached_courses", coursesString)
+                    .putString("cached_purchased", "")
+                    .apply()
             }
         }
     }
@@ -142,19 +173,10 @@ fun MainDashboardScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier.width(300.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.White)
-                ) {
+            ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
+                Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(ThemeBlue)
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().background(ThemeBlue).padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -291,35 +313,51 @@ fun MainDashboardScreen(
             }
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(Color.White)) { 
-                if (isLoading) {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.logo),
-                            contentDescription = "Loading Logo",
-                            modifier = Modifier.size(80.dp).clip(CircleShape)
+                when (selectedTab) {
+                    BottomTab.HOME -> {
+                        DashboardHomeContent(
+                            allCourses = allCourses,
+                            freeCourses = freeCourses,
+                            purchasedCourses = purchasedCourses,
+                            proCourses = proCourses,
+                            auth = auth,
+                            isLoading = isLoading,
+                            onNavigateToCourse = onNavigateToCourse
                         )
-                        
                     }
-                } else {
-                    when (selectedTab) {
-                        BottomTab.HOME -> {
-                            DashboardHomeContent(allCourses, freeCourses, purchasedCourses, proCourses, auth, onNavigateToCourse)
-                        }
-                        BottomTab.FREE_COURSES -> {
-                            CourseGridScreen("Free Courses", freeCourses, onNavigateToCourse)
-                        }
-                        BottomTab.PRO_COURSES -> {
-                            CourseGridScreen("Pro Courses", proCourses, onNavigateToCourse)
-                        }
-                        BottomTab.PURCHASED_COURSES -> {
-                            CourseGridScreen("Purchased Courses", purchasedCourses, onNavigateToCourse)
-                        }
+                    BottomTab.FREE_COURSES -> {
+                        if (isLoading && freeCourses.isEmpty()) LoadingLogo() 
+                        else CourseGridScreen("Free Courses", freeCourses, onNavigateToCourse)
+                    }
+                    BottomTab.PRO_COURSES -> {
+                        if (isLoading && proCourses.isEmpty()) LoadingLogo() 
+                        else CourseGridScreen("Pro Courses", proCourses, onNavigateToCourse)
+                    }
+                    BottomTab.PURCHASED_COURSES -> {
+                        if (isLoading && purchasedCourses.isEmpty()) LoadingLogo() 
+                        else CourseGridScreen("Purchased Courses", purchasedCourses, onNavigateToCourse)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun LoadingLogo() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .background(ThemeBlue.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("🎓", fontSize = 40.sp)
         }
     }
 }
@@ -360,6 +398,10 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
     )
 }
 
+// ---------------------------------------------------------------------------
+// HOME TAB CONTENT - PROFILE CARD & PASTEL CATEGORY GRID
+// ---------------------------------------------------------------------------
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardHomeContent(
@@ -368,6 +410,7 @@ fun DashboardHomeContent(
     purchasedCourses: List<CourseModel>,
     proCourses: List<CourseModel>,
     auth: FirebaseAuth,
+    isLoading: Boolean,
     onNavigateToCourse: (String) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
@@ -391,7 +434,7 @@ fun DashboardHomeContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)
-                    .basicMarquee() 
+                    .basicMarquee()
             )
 
             LazyVerticalGrid(
@@ -450,7 +493,9 @@ fun DashboardHomeContent(
                 )
             }
 
-            if (displayedCourses.isEmpty()) {
+            if (isLoading && allCourses.isEmpty()) {
+                LoadingLogo()
+            } else if (displayedCourses.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No courses found in this category.", color = Color.Gray)
                 }
@@ -461,8 +506,12 @@ fun DashboardHomeContent(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(displayedCourses) { course ->
-                        CourseCardView(course) { onNavigateToCourse(course.sheetId) }
+                    // APPLY PASTEL COLORS TO COURSE CARDS HERE
+                    itemsIndexed(displayedCourses) { index, course ->
+                        CourseCardView(
+                            course = course, 
+                            backgroundColor = PastelColors[index % PastelColors.size]
+                        ) { onNavigateToCourse(course.sheetId) }
                     }
                 }
             }
@@ -470,6 +519,9 @@ fun DashboardHomeContent(
     }
 }
 
+// ---------------------------------------------------------------------------
+// PROFILE HEADER COMPONENT
+// ---------------------------------------------------------------------------
 @Composable
 fun UserProfileHeader(auth: FirebaseAuth) {
     val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
@@ -508,6 +560,9 @@ fun UserProfileHeader(auth: FirebaseAuth) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// PASTEL CATEGORY CARD DESIGN
+// ---------------------------------------------------------------------------
 @Composable
 fun PastelCategoryCard(
     title: String,
@@ -517,7 +572,7 @@ fun PastelCategoryCard(
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier
             .height(110.dp)
             .clickable { onClick() }
@@ -549,6 +604,9 @@ fun PastelCategoryCard(
     }
 }
 
+// ---------------------------------------------------------------------------
+// INDIVIDUAL COURSE CARD DESIGN (Now with Pastel Colors!)
+// ---------------------------------------------------------------------------
 @Composable
 fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCourse: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -560,45 +618,53 @@ fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCour
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(courses) { course ->
-                CourseCardView(course) { onNavigateToCourse(course.sheetId) }
+            // APPLY PASTEL COLORS TO COURSE CARDS HERE
+            itemsIndexed(courses) { index, course ->
+                CourseCardView(
+                    course = course,
+                    backgroundColor = PastelColors[index % PastelColors.size]
+                ) { onNavigateToCourse(course.sheetId) }
             }
         }
     }
 }
 
 @Composable
-fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
+fun CourseCardView(course: CourseModel, backgroundColor: Color, onClick: () -> Unit) {
     val isFree = course.fee == 0.0
     val originalPrice = if (!isFree) course.fee * 1.5 else 0.0 
     
     val context = LocalContext.current
     
     Card(
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), // Flat design fits pastels better
         modifier = Modifier
             .clickable { onClick() }
             .fillMaxWidth()
     ) {
         Column {
+            // Header box with translucent white to blend with the pastel background
             Box(
-                modifier = Modifier.fillMaxWidth().height(100.dp).background(ThemeDarkBlue),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .background(Color.White.copy(alpha = 0.4f)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = ThemeBlue, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("JCV MOCK TESTS", color = GoldColor, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                        Text("JCV MOCK TESTS", color = ThemeBlue, fontWeight = FontWeight.Black, fontSize = 12.sp)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    Box(modifier = Modifier.background(RedBadgeColor, RoundedCornerShape(2.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                    Box(modifier = Modifier.background(RedBadgeColor, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                         Text(course.title.take(15).uppercase(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("FULL COURSE", color = Color(0xFF4FC3F7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("FULL COURSE", color = Color.DarkGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -607,6 +673,7 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
                     text = course.title,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
+                    color = Color.Black,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.height(32.dp)
@@ -620,7 +687,7 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.ThumbUp, contentDescription = "Likes", tint = RedBadgeColor, modifier = Modifier.size(12.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("100+", fontSize = 10.sp, color = Color.Gray)
+                        Text("100+", fontSize = 10.sp, color = Color.DarkGray)
                     }
                     
                     Spacer(modifier = Modifier.width(12.dp))
@@ -647,7 +714,7 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
                     }
                 }
                 
-                Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color.LightGray, thickness = 0.5.dp)
+                Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color.White.copy(alpha = 0.5f), thickness = 1.dp)
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -655,17 +722,18 @@ fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Column {
-                        Text("₹", fontSize = 10.sp, color = Color.Gray)
+                        Text("₹", fontSize = 10.sp, color = Color.DarkGray)
                         Text(
                             text = if (isFree) "Free" else course.fee.toInt().toString(), 
                             fontSize = 14.sp, 
+                            color = Color.Black,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     
                     if (!isFree) {
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("₹${originalPrice.toInt()}", fontSize = 10.sp, color = Color.Gray, textDecoration = TextDecoration.LineThrough)
+                            Text("₹${originalPrice.toInt()}", fontSize = 10.sp, color = Color.DarkGray, textDecoration = TextDecoration.LineThrough)
                             Text("30% OFF", fontSize = 10.sp, color = RedBadgeColor, fontWeight = FontWeight.Bold)
                         }
                     }
