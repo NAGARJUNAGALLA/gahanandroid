@@ -201,7 +201,7 @@ fun MainDashboardScreen(
 
                     // DYNAMIC PURCHASED COURSES
                     if (purchasedCourses.isNotEmpty()) {
-                        DrawerSectionHeader("PURCHASED COURSES", Icons.Default.MenuBook, Color(0xFF9C27B0))
+                        DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
                         purchasedCourses.forEach { course ->
                             DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) }
                         }
