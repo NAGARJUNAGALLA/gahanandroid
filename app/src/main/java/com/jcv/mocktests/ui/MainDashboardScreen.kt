@@ -362,18 +362,17 @@ fun DashboardHomeContent(
     
     val homeCategories = listOf(
         "Free Courses", "Pro Courses", "Purchased", 
-        "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET"
+        "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET","Banking","SSC"
     )
     
-    // Assigning relevant core icons for each category
     val categoryIcons = listOf(
         Icons.Default.CheckCircle, 
         Icons.Default.Star, 
         Icons.Default.List, 
         Icons.Default.Edit, 
-        Icons.Default.AccountBalance, 
-        Icons.Default.Build, 
-        Icons.Default.DateRange
+        Icons.Default.Person,   
+        Icons.Default.Settings, 
+        Icons.Default.Info      
     )
 
     if (selectedCategory == null) {
