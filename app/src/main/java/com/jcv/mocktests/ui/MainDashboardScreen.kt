@@ -1,7 +1,7 @@
 package com.jcv.mocktests.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import android.content.Intent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
@@ -351,6 +351,7 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
 // ---------------------------------------------------------------------------
 // HOME TAB CONTENT - PROFILE CARD & PASTEL CATEGORY GRID
 // ---------------------------------------------------------------------------
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardHomeContent(
@@ -451,6 +452,7 @@ fun DashboardHomeContent(
                     Text("No courses found in this category.", color = Color.Gray)
                 }
             } else {
+                // REUSING COURSE CARD VIEW HERE
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -476,7 +478,7 @@ fun UserProfileHeader(auth: FirebaseAuth) {
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White), // Ensured this is white as well
+        colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -497,7 +499,7 @@ fun UserProfileHeader(auth: FirebaseAuth) {
             
             Spacer(modifier = Modifier.width(16.dp))
             
-            // Details aligned to end - Keeping only Name and Mobile
+            // Details aligned to end
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.End
@@ -556,13 +558,14 @@ fun PastelCategoryCard(
 }
 
 // ---------------------------------------------------------------------------
-// INDIVIDUAL COURSE CARD DESIGN (With Share Option)
+// INDIVIDUAL COURSE CARD DESIGN (Shared UI Across App)
 // ---------------------------------------------------------------------------
 @Composable
 fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCourse: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("$title (${courses.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
         Spacer(modifier = Modifier.height(12.dp))
+        // REUSING COURSE CARD VIEW HERE
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
