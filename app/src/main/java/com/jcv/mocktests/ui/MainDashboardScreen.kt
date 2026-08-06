@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -31,9 +33,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
 
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
 
@@ -102,6 +107,7 @@ fun MainDashboardScreen(
     // Merchant Settings
     var upiId by remember { mutableStateOf("") }
     var merchantName by remember { mutableStateOf("JCV MOCK TESTS") }
+    var staticQrUrl by remember { mutableStateOf("") }
 
     var isLoading by remember { mutableStateOf(true) }
 
@@ -109,14 +115,17 @@ fun MainDashboardScreen(
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
+        // 1. Fetch Merchant Settings for QR Code
         db.collection("settings").get().addOnSuccessListener { settingsSnap ->
             if (!settingsSnap.isEmpty) {
                 val sData = settingsSnap.documents[0]
                 upiId = sData.getString("upiId") ?: sData.getString("upi_id") ?: ""
                 merchantName = sData.getString("merchantName") ?: sData.getString("merchant_name") ?: "JCV MOCK TESTS"
+                staticQrUrl = sData.getString("qrCodeLink") ?: sData.getString("qr_code_link") ?: sData.getString("qrcode") ?: ""
             }
         }
 
+        // 2. Load Local Cache
         val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
         val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
         val cachedPendingStr = prefs.getString("cached_pending", "") ?: ""
@@ -141,6 +150,7 @@ fun MainDashboardScreen(
             isLoading = false
         }
 
+        // 3. Background Fetch
         db.collection("exams").document("testList").get().addOnSuccessListener { examDoc ->
             val testsArray = examDoc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             
@@ -215,6 +225,7 @@ fun MainDashboardScreen(
             isSubmitting = isSubmittingPayment,
             upiId = upiId,
             merchantName = merchantName,
+            staticQrUrl = staticQrUrl,
             onDismiss = { showPaymentDialog = null },
             onSubmit = { app, utr ->
                 isSubmittingPayment = true
@@ -425,7 +436,7 @@ fun MainDashboardScreen(
 }
 
 // ---------------------------------------------------------------------------
-// PAYMENT MODAL DIALOG (DIRECT APP INTENT & REJECTION HANDLING)
+// PAYMENT MODAL DIALOG (QR CODE & REJECTION HANDLING)
 // ---------------------------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -435,14 +446,24 @@ fun PaymentDialog(
     isSubmitting: Boolean,
     upiId: String,
     merchantName: String,
+    staticQrUrl: String,
     onDismiss: () -> Unit,
     onSubmit: (String, String) -> Unit
 ) {
-    val context = LocalContext.current
+    var selectedApp by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
     var utr by remember { mutableStateOf("") }
-    
-    // Automatically open the UTR input field if their previous attempt was rejected!
-    var hasClickedPay by remember(isRejected) { mutableStateOf(isRejected) }
+    val apps = listOf("PhonePe", "Google Pay (GPay)", "Paytm", "Other")
+
+    // Generate Dynamic QR URL
+    val qrUrl = remember(upiId, staticQrUrl, course.fee) {
+        if (upiId.isNotBlank()) {
+            val upiString = "upi://pay?pa=$upiId&pn=${URLEncoder.encode(merchantName, "UTF-8")}&am=${course.fee}&cu=INR"
+            "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${URLEncoder.encode(upiString, "UTF-8")}"
+        } else {
+            staticQrUrl
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isSubmitting) onDismiss() },
@@ -461,7 +482,9 @@ fun PaymentDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("₹${course.fee.toInt()}", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color.DarkGray)
@@ -472,91 +495,106 @@ fun PaymentDialog(
                         modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()
                     ) {
                         Text(
-                            text = "Your previous payment was rejected.\n\nPlease click Pay Now again, OR re-enter your correct UTR below.",
+                            text = "Your previous registration was rejected.\nPlease pay the fee or check your UTR number and resend.",
                             color = Color(0xFFC62828), fontSize = 12.sp, modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // DIRECT "PAY NOW" BUTTON
-                Button(
-                    onClick = {
-                        if (upiId.isNotBlank()) {
-                            val uriString = "upi://pay?pa=$upiId&pn=${java.net.URLEncoder.encode(merchantName, "UTF-8")}&am=${course.fee}&cu=INR"
-                            val uri = android.net.Uri.parse(uriString)
-                            val intent = Intent(Intent.ACTION_VIEW, uri)
-                            
-                            val chooser = Intent.createChooser(intent, "Pay securely with")
-                            
-                            try {
-                                context.startActivity(chooser)
-                                hasClickedPay = true
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "No UPI app found on your phone.", Toast.LENGTH_LONG).show()
-                                hasClickedPay = true 
-                            }
-                        } else {
-                            Toast.makeText(context, "UPI ID is not configured. Please contact the Admin.", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), 
-                    shape = RoundedCornerShape(8.dp)
+                Text(
+                    "Scan the QR code below to pay. If already paid, submit your UTR.",
+                    fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 8.dp)
+                )
+                
+                // ACTUAL QR CODE
+                Box(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .background(Color(0xFFF5F6FA), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("PAY NOW", fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
+                    if (qrUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(qrUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "UPI QR Code",
+                            modifier = Modifier.padding(8.dp).fillMaxSize()
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = ThemeBlue, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Loading QR...", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
                 }
                 
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Click to open GPay, PhonePe, Paytm, or any UPI App",
-                    fontSize = 10.sp, color = Color.Gray, textAlign = TextAlign.Center
-                )
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // SHOW INPUT IF "PAY NOW" CLICKED (OR IF REJECTED)
-                if (hasClickedPay) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Divider(color = Color.LightGray, thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Text(
-                        text = "After successful payment, enter the 12-digit UTR/Reference number below to verify.",
-                        fontSize = 12.sp, color = ThemeBlue, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
                     OutlinedTextField(
-                        value = utr,
-                        onValueChange = { utr = it },
-                        label = { Text("Transaction / UTR Number") },
-                        placeholder = { Text("e.g. 123456789012") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
+                        value = selectedApp,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Paid using app") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = ThemeBlue,
                             focusedLabelColor = ThemeBlue
                         )
                     )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.background(Color.White)
+                    ) {
+                        apps.forEach { app ->
+                            DropdownMenuItem(
+                                text = { Text(app) },
+                                onClick = {
+                                    selectedApp = app
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
                 }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = utr,
+                    onValueChange = { utr = it },
+                    label = { Text("Transaction / UTR Number") },
+                    placeholder = { Text("e.g. 123456789012") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ThemeBlue,
+                        focusedLabelColor = ThemeBlue
+                    )
+                )
             }
         },
         confirmButton = {
-            if (hasClickedPay) {
-                Button(
-                    onClick = { onSubmit("Direct UPI", utr) }, 
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    enabled = utr.isNotBlank() && !isSubmitting,
-                    colors = ButtonDefaults.buttonColors(containerColor = ThemeBlue),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    if (isSubmitting) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                    } else {
-                        Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
+            Button(
+                onClick = { onSubmit(selectedApp, utr) },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                enabled = selectedApp.isNotBlank() && utr.isNotBlank() && !isSubmitting,
+                colors = ButtonDefaults.buttonColors(containerColor = ThemeBlue),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (isSubmitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         },
