@@ -3,14 +3,17 @@ package com.jcv.mocktests.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
@@ -29,15 +34,22 @@ import kotlinx.coroutines.launch
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
 
 val ThemeBlue = Color(0xFF1976D2)
-val ThemeDarkBlue = Color(0xFF0D47A1)
+val ThemeDarkBlue = Color(0xFF181E2F)
 val LightGreyBg = Color(0xFFF5F6FA)
+val GoldColor = Color(0xFFFFC107)
+val RedBadgeColor = Color(0xFFE53935)
 
-// Data model for dynamic Firebase fetching
+// Data models mirroring your Firebase structure
 data class CourseModel(
-    val id: String,
+    val sheetId: String,
     val title: String,
-    val price: String,
-    val keywords: List<String> = emptyList()
+    val fee: Double,
+    val topic: String
+)
+
+data class PaymentModel(
+    val sheetId: String,
+    val status: String
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,34 +75,74 @@ fun MainDashboardScreen(
     val scope = rememberCoroutineScope()
 
     // State for dynamic Firebase data
-    var courses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
-    var categories by remember { mutableStateOf<List<String>>(emptyList()) }
+    var allCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+    var freeCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+    var proCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+    var purchasedCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+    var dynamicTopics by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
 
-    // Fetch Courses and Categories dynamically
+    // Fetch logic based on source code instructions
     LaunchedEffect(Unit) {
         val db = FirebaseFirestore.getInstance()
-        // Assuming your courses are stored in a "courses" or "pro_course_questions" collection
-        // Adjust the collection name if yours is different in Firebase
-        db.collection("courses").get().addOnSuccessListener { result ->
-            val fetchedCourses = result.documents.mapNotNull { doc ->
-                val title = doc.getString("title") ?: doc.getString("name") ?: "Course"
-                val price = doc.getString("price") ?: "Free"
-                val keywords = doc.get("keywords") as? List<String> ?: emptyList()
-                CourseModel(doc.id, title, price, keywords)
-            }
-            courses = fetchedCourses
+        val uid = auth.currentUser?.uid
+
+        db.collection("exams").document("testList").get().addOnSuccessListener { examDoc ->
+            val testsArray = examDoc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             
-            // Extract unique keywords for dynamic categories
-            val extractedCategories = fetchedCourses.flatMap { it.keywords }.distinct()
-            categories = extractedCategories
+            val fetchedCourses = testsArray.map { map ->
+                val title = map["title"] as? String ?: "JCV Course"
+                val feeString = map["fee"]?.toString() ?: "0"
+                val fee = feeString.toDoubleOrNull() ?: 0.0
+                val sheetId = map["sheetId"] as? String ?: ""
+                
+                // Categorization logic matching your web app rules
+                val topic = when {
+                    title.uppercase().contains("GROUP") -> "GROUP EXAMS"
+                    title.uppercase().contains("CURRENT") -> "CURRENT AFFAIRS"
+                    title.uppercase().contains("IIT") || title.uppercase().contains("CONSTABLE") -> "IIT"
+                    title.uppercase().contains("TET") || title.uppercase().contains("DSC") -> "TET & DSC"
+                    else -> "OTHERS"
+                }
+                
+                CourseModel(sheetId, title, fee, topic)
+            }
+
+            if (uid != null) {
+                db.collection("pending_registrations").whereEqualTo("uid", uid).get().addOnSuccessListener { paySnap ->
+                    val payments = paySnap.documents.mapNotNull { doc ->
+                        val sheetId = doc.getString("sheetId") ?: ""
+                        val status = doc.getString("status") ?: ""
+                        PaymentModel(sheetId, status)
+                    }
+                    
+                    // Approved purchases
+                    val approvedSheetIds = payments.filter { it.status == "approved" }.map { it.sheetId }
+                    
+                    allCourses = fetchedCourses
+                    freeCourses = fetchedCourses.filter { it.fee == 0.0 }
+                    purchasedCourses = fetchedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
+                    proCourses = fetchedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
+                    
+                    val topicsList = mutableListOf("ALL", "FREE", "PURCHASED", "PRO")
+                    topicsList.addAll(fetchedCourses.map { it.topic }.distinct())
+                    dynamicTopics = topicsList
+                    
+                    isLoading = false
+                }
+            } else {
+                allCourses = fetchedCourses
+                freeCourses = fetchedCourses.filter { it.fee == 0.0 }
+                proCourses = fetchedCourses.filter { it.fee > 0.0 }
+                
+                val topicsList = mutableListOf("ALL", "FREE", "PRO")
+                topicsList.addAll(fetchedCourses.map { it.topic }.distinct())
+                dynamicTopics = topicsList
+                
+                isLoading = false
+            }
         }
     }
-
-    // Categorize courses
-    val freeCourses = courses.filter { it.price.equals("free", ignoreCase = true) || it.price == "0" }
-    val proCourses = courses.filter { !it.price.equals("free", ignoreCase = true) && it.price != "0" }
-    // You would typically fetch purchased courses via a separate user-specific subcollection
-    val purchasedCourses = emptyList<CourseModel>() 
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -98,7 +150,6 @@ fun MainDashboardScreen(
             ModalDrawerSheet(
                 modifier = Modifier.width(300.dp)
             ) {
-                // Background color applied directly to Column to fix containerColor error
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -137,21 +188,21 @@ fun MainDashboardScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
 
-                    Divider(modifier = Modifier.padding(vertical = 8.dp)) // Fixed HorizontalDivider
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
 
                     // DYNAMIC FREE COURSES
                     if (freeCourses.isNotEmpty()) {
                         DrawerSectionHeader("FREE COURSES", Icons.Default.Star, Color(0xFF4CAF50))
                         freeCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { onNavigateToCourse(course.id) }
+                            DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) }
                         }
                     }
 
-                    // DYNAMIC PURCHASED COURSES (Placeholder for your logic)
+                    // DYNAMIC PURCHASED COURSES
                     if (purchasedCourses.isNotEmpty()) {
-                        DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
+                        DrawerSectionHeader("PURCHASED COURSES", Icons.Default.MenuBook, Color(0xFF9C27B0))
                         purchasedCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { onNavigateToCourse(course.id) }
+                            DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) }
                         }
                     }
 
@@ -159,14 +210,14 @@ fun MainDashboardScreen(
                     if (proCourses.isNotEmpty()) {
                         DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
                         proCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { onNavigateToCourse(course.id) }
+                            DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) }
                         }
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
                     Divider()
                     
-                    // Profile & Logout
+                    // Profile & Logout Info
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -204,11 +255,6 @@ fun MainDashboardScreen(
                             Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
                         }
                     },
-                    actions = {
-                        IconButton(onClick = { /* Notifications */ }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Alerts", tint = Color.White)
-                        }
-                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = ThemeBlue)
                 )
             },
@@ -243,7 +289,7 @@ fun MainDashboardScreen(
                     )
                     
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.List, contentDescription = "Purchased") },
+                        icon = { Icon(Icons.Default.MenuBook, contentDescription = "Purchased") },
                         label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
                         selected = selectedTab == BottomTab.PURCHASED_COURSES,
                         onClick = { 
@@ -256,18 +302,22 @@ fun MainDashboardScreen(
             }
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(LightGreyBg)) {
-                when (selectedTab) {
-                    BottomTab.HOME -> {
-                        DashboardHomeContent(categories, onNavigateToCourse)
-                    }
-                    BottomTab.FREE_COURSES -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Free Courses List") }
-                    }
-                    BottomTab.PRO_COURSES -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Pro Courses List") }
-                    }
-                    BottomTab.PURCHASED_COURSES -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Purchased Courses List") }
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = ThemeBlue)
+                } else {
+                    when (selectedTab) {
+                        BottomTab.HOME -> {
+                            DashboardHomeContent(allCourses, freeCourses, purchasedCourses, proCourses, dynamicTopics, onNavigateToCourse)
+                        }
+                        BottomTab.FREE_COURSES -> {
+                            CourseGridScreen("Free Courses", freeCourses, onNavigateToCourse)
+                        }
+                        BottomTab.PRO_COURSES -> {
+                            CourseGridScreen("Pro Courses", proCourses, onNavigateToCourse)
+                        }
+                        BottomTab.PURCHASED_COURSES -> {
+                            CourseGridScreen("Purchased Courses", purchasedCourses, onNavigateToCourse)
+                        }
                     }
                 }
             }
@@ -301,6 +351,9 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
     Text(
         text = title,
         fontSize = 14.sp,
+        color = Color.DarkGray,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
@@ -309,103 +362,220 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// HOME TAB CONTENT 
+// HOME TAB CONTENT & FILTER LOGIC
 // ---------------------------------------------------------------------------
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardHomeContent(dynamicCategories: List<String>, onNavigateToCourse: (String) -> Unit) {
+fun DashboardHomeContent(
+    allCourses: List<CourseModel>,
+    freeCourses: List<CourseModel>,
+    purchasedCourses: List<CourseModel>,
+    proCourses: List<CourseModel>,
+    dynamicTopics: List<String>, 
+    onNavigateToCourse: (String) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var activeTopic by remember { mutableStateOf("ALL") }
+
+    // Filtering logic mirroring your web app
+    val displayedCourses = remember(searchQuery, activeTopic, allCourses) {
+        var filtered = when (activeTopic) {
+            "ALL" -> allCourses
+            "FREE" -> freeCourses
+            "PURCHASED" -> purchasedCourses
+            "PRO" -> proCourses
+            else -> allCourses.filter { it.topic == activeTopic }
+        }
+        
+        if (searchQuery.isNotBlank()) {
+            filtered = filtered.filter { it.title.contains(searchQuery, ignoreCase = true) }
+        }
+        filtered
+    }
+
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+        modifier = Modifier.fillMaxSize()
     ) {
         // Image Slider Placeholder
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .background(ThemeDarkBlue),
+            modifier = Modifier.fillMaxWidth().height(180.dp).background(ThemeDarkBlue),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Slider", tint = Color.White, modifier = Modifier.size(48.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Promotional Banner / Image Slider", color = Color.White)
+                Icon(Icons.Default.Image, contentDescription = "Slider", tint = Color.White, modifier = Modifier.size(48.dp))
+                Text("Promotional Image Slider", color = Color.White)
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search for a course...", color = Color.Gray, fontSize = 14.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.Gray) },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = ThemeBlue,
+                    unfocusedBorderColor = Color.LightGray,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
 
-        Text(
-            text = "What are you looking for?",
-            fontWeight = FontWeight.Bold,
-            fontSize = 18.sp,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Text("FILTER BY TOPICS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+            
+            // Dynamic Filter Chips
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
+            ) {
+                items(dynamicTopics) { topic ->
+                    val isSelected = activeTopic == topic
+                    val count = when (topic) {
+                        "ALL" -> allCourses.size
+                        "FREE" -> freeCourses.size
+                        "PURCHASED" -> purchasedCourses.size
+                        "PRO" -> proCourses.size
+                        else -> allCourses.count { it.topic == topic }
+                    }
+                    
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (isSelected) Color(0xFFE3F2FD) else Color.White,
+                        border = BorderStroke(1.dp, if (isSelected) ThemeBlue else Color.LightGray),
+                        modifier = Modifier.clickable { activeTopic = topic }
+                    ) {
+                        Text(
+                            text = "$topic ($count)",
+                            color = if (isSelected) ThemeBlue else Color.DarkGray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
 
-        // Fallback categories if Firebase returns nothing
-        val displayCategories = dynamicCategories.ifEmpty { 
-            listOf("ALL COURSES", "TET & DSC", "GENERAL EXAMS", "TEST SERIES") 
-        }
+            Text("COURSES (${displayedCourses.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+            
+            Spacer(modifier = Modifier.height(8.dp))
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.heightIn(max = 600.dp) // Bounds grid height
-        ) {
-            items(displayCategories) { categoryTitle ->
-                CategoryCard(categoryTitle)
+            // Courses Grid
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(displayedCourses) { course ->
+                    CourseCardView(course) { onNavigateToCourse(course.sheetId) }
+                }
             }
         }
     }
 }
 
 @Composable
-fun CategoryCard(title: String) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = ThemeBlue),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        modifier = Modifier
-            .aspectRatio(0.9f)
-            .clickable { /* Handle Category Filter Click */ }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCourse: (String) -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("$title (${courses.size})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+        Spacer(modifier = Modifier.height(12.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxSize()
         ) {
+            items(courses) { course ->
+                CourseCardView(course) { onNavigateToCourse(course.sheetId) }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// INDIVIDUAL COURSE CARD DESIGN (Matches Provided Images)
+// ---------------------------------------------------------------------------
+@Composable
+fun CourseCardView(course: CourseModel, onClick: () -> Unit) {
+    val isFree = course.fee == 0.0
+    val originalPrice = if (!isFree) course.fee * 1.5 else 0.0 
+    
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.clickable { onClick() }.fillMaxWidth()
+    ) {
+        Column {
+            // Dark Header Graphic
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color.White.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxWidth().height(100.dp).background(ThemeDarkBlue),
                 contentAlignment = Alignment.Center
             ) {
-                // Using a generic list icon for dynamically fetched categories
-                Icon(
-                    imageVector = Icons.Default.List,
-                    contentDescription = title,
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("JCV MOCK TESTS", color = GoldColor, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Box(modifier = Modifier.background(RedBadgeColor, RoundedCornerShape(2.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                        Text(course.title.take(15).uppercase(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("FULL COURSE", color = Color(0xFF4FC3F7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                lineHeight = 14.sp,
-                maxLines = 2
-            )
+
+            // Card Content Details
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    text = course.title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.height(32.dp)
+                )
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.ThumbUp, contentDescription = "Likes", tint = RedBadgeColor, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("100+", fontSize = 10.sp, color = Color.Gray)
+                    }
+                }
+                
+                Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color.LightGray, thickness = 0.5.dp)
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column {
+                        Text("₹", fontSize = 10.sp, color = Color.Gray)
+                        Text(
+                            text = if (isFree) "Free" else course.fee.toInt().toString(), 
+                            fontSize = 14.sp, 
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    
+                    if (!isFree) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("₹${originalPrice.toInt()}", fontSize = 10.sp, color = Color.Gray, textDecoration = TextDecoration.LineThrough)
+                            Text("30% OFF", fontSize = 10.sp, color = RedBadgeColor, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
     }
 }
