@@ -1,5 +1,6 @@
 package com.jcv.mocktests.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -350,7 +351,7 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
 // ---------------------------------------------------------------------------
 // HOME TAB CONTENT - PROFILE CARD & PASTEL CATEGORY GRID
 // ---------------------------------------------------------------------------
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardHomeContent(
     allCourses: List<CourseModel>,
