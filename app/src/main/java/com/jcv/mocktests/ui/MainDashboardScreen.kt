@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.BorderStroke
 
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
 
@@ -289,7 +290,7 @@ fun MainDashboardScreen(
                     )
                     
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.MenuBook, contentDescription = "Purchased") },
+                        icon = { Icon(Icons.Default.List, contentDescription = "Purchased") },
                         label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
                         selected = selectedTab == BottomTab.PURCHASED_COURSES,
                         onClick = { 
@@ -403,7 +404,7 @@ fun DashboardHomeContent(
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Image, contentDescription = "Slider", tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(Icons.Default.PlayArrow, contentDescription = "Slider", tint = Color.White, modifier = Modifier.size(48.dp))
                 Text("Promotional Image Slider", color = Color.White)
             }
         }
