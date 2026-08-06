@@ -2,6 +2,7 @@ package com.jcv.mocktests.ui
 
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
@@ -20,9 +21,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -31,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.jcv.mocktests.R
 import kotlinx.coroutines.launch
 
 enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
@@ -41,15 +45,14 @@ val LightGreyBg = Color(0xFFF5F6FA)
 val GoldColor = Color(0xFFFFC107)
 val RedBadgeColor = Color(0xFFE53935)
 
-// Pastel Colors for the Category Grid
 val PastelColors = listOf(
-    Color(0xFFFFF3E0), // Soft Peach
-    Color(0xFFFCE4EC), // Soft Pink
-    Color(0xFFF0F4C3), // Soft Lime/Yellow
-    Color(0xFFD7CCC8), // Soft Brown/Grey
-    Color(0xFFF3E5F5), // Soft Lavender
-    Color(0xFFE8F5E9), // Soft Mint
-    Color(0xFFE0F7FA)  // Soft Cyan
+    Color(0xFFFFF3E0), 
+    Color(0xFFFCE4EC), 
+    Color(0xFFF0F4C3), 
+    Color(0xFFD7CCC8), 
+    Color(0xFFF3E5F5), 
+    Color(0xFFE8F5E9), 
+    Color(0xFFE0F7FA)  
 )
 
 data class CourseModel(
@@ -287,10 +290,20 @@ fun MainDashboardScreen(
                 }
             }
         ) { paddingValues ->
-            // Background is now completely White
             Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(Color.White)) { 
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = ThemeBlue)
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.logo),
+                            contentDescription = "Loading Logo",
+                            modifier = Modifier.size(80.dp).clip(CircleShape)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        CircularProgressIndicator(color = ThemeBlue)
+                    }
                 } else {
                     when (selectedTab) {
                         BottomTab.HOME -> {
@@ -348,10 +361,6 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
     )
 }
 
-// ---------------------------------------------------------------------------
-// HOME TAB CONTENT - PROFILE CARD & PASTEL CATEGORY GRID
-// ---------------------------------------------------------------------------
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardHomeContent(
@@ -370,13 +379,10 @@ fun DashboardHomeContent(
     )
 
     if (selectedCategory == null) {
-        // STATE 1: SHOW PROFILE AND CATEGORY CARDS
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             
-            // 1. Simplified Profile Header Card
             UserProfileHeader(auth)
             
-            // 2. Scrolling Marquee Text
             Text(
                 text = "Welcome to JCV MOCK Tests and Thanks for Choosing JCV MOCK TESTS",
                 color = ThemeBlue,
@@ -386,10 +392,9 @@ fun DashboardHomeContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)
-                    .basicMarquee() // Native compose scrolling effect
+                    .basicMarquee() 
             )
 
-            // 3. Pastel Grid Categories with Emoji
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -407,7 +412,6 @@ fun DashboardHomeContent(
             }
         }
     } else {
-        // STATE 2: SHOW COURSES FOR SELECTED CATEGORY
         val displayedCourses = remember(selectedCategory, allCourses) {
             when (selectedCategory) {
                 "Free Courses" -> freeCourses
@@ -452,7 +456,6 @@ fun DashboardHomeContent(
                     Text("No courses found in this category.", color = Color.Gray)
                 }
             } else {
-                // REUSING COURSE CARD VIEW HERE
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -468,9 +471,6 @@ fun DashboardHomeContent(
     }
 }
 
-// ---------------------------------------------------------------------------
-// PROFILE HEADER COMPONENT
-// ---------------------------------------------------------------------------
 @Composable
 fun UserProfileHeader(auth: FirebaseAuth) {
     val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
@@ -486,7 +486,6 @@ fun UserProfileHeader(auth: FirebaseAuth) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile Image Placeholder
             Box(
                 modifier = Modifier
                     .size(80.dp)
@@ -499,7 +498,6 @@ fun UserProfileHeader(auth: FirebaseAuth) {
             
             Spacer(modifier = Modifier.width(16.dp))
             
-            // Details aligned to end
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.End
@@ -511,9 +509,6 @@ fun UserProfileHeader(auth: FirebaseAuth) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// PASTEL CATEGORY CARD DESIGN
-// ---------------------------------------------------------------------------
 @Composable
 fun PastelCategoryCard(
     title: String,
@@ -533,7 +528,6 @@ fun PastelCategoryCard(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Top Left Icon inside a white circle using standard text emoji
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -544,7 +538,6 @@ fun PastelCategoryCard(
                 Text("🎓", fontSize = 18.sp)
             }
             
-            // Bottom Right Text
             Text(
                 text = title,
                 color = Color.Black,
@@ -557,15 +550,11 @@ fun PastelCategoryCard(
     }
 }
 
-// ---------------------------------------------------------------------------
-// INDIVIDUAL COURSE CARD DESIGN (Shared UI Across App)
-// ---------------------------------------------------------------------------
 @Composable
 fun CourseGridScreen(title: String, courses: List<CourseModel>, onNavigateToCourse: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("$title (${courses.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
         Spacer(modifier = Modifier.height(12.dp))
-        // REUSING COURSE CARD VIEW HERE
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
