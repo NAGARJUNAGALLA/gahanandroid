@@ -279,10 +279,10 @@ fun ExamScreen(
 
                 // Section Details Table
                 Surface(
-    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-    border = BorderStroke(1.dp, Color.LightGray), // <-- Capitalized BorderStroke
-    color = Color.White
-){
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                    border = BorderStroke(1.dp, Color.LightGray),
+                    color = Color.White
+                ){
                     Column {
                         Row(modifier = Modifier.background(Color(0xFFF3F4F6)).padding(8.dp)) {
                             Text("Section Name", modifier = Modifier.weight(1.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -545,7 +545,7 @@ fun ExamScreen(
                                                     color = if (isActive) Color.Blue else if (color == StatusNotVisitedColor) Color.LightGray else Color.Transparent,
                                                     shape = shape
                                                 )
-                                                .clickable {
+                                                .clickable { 
                                                     currentQIndex = idx
                                                     if (!isReviewMode && questionStates[currentSecIndex][idx].status == QuestionStatus.NOT_VISITED) {
                                                         questionStates[currentSecIndex][idx] = questionStates[currentSecIndex][idx].copy(status = QuestionStatus.NOT_ANSWERED)
@@ -740,12 +740,11 @@ fun ExamScreen(
                             item {
                                 Row(verticalAlignment = Alignment.Top) {
                                     Text("Q ${currentSection.globalStartIndex + currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-
-MathText(
-    text = currentQ.text, 
-    fontSizePx = 18,
-    modifier = Modifier.weight(1f)
-)
+                                    MathText(
+                                        text = currentQ.text, 
+                                        fontSizePx = 18,
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
                                 Spacer(modifier = Modifier.height(24.dp))
                             }
@@ -763,6 +762,9 @@ MathText(
                                     if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray
                                 } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray
 
+                                // Determine text color based on selection/review mode
+                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) "#FFFFFF" else "#333333"
+
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -777,6 +779,7 @@ MathText(
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    // 1. The Circle with A, B, C, D
                                     Box(
                                         modifier = Modifier
                                             .size(28.dp)
@@ -795,12 +798,26 @@ MathText(
                                             color = if (isReviewMode && (isCorrectAnswer || isSelected)) Color.White else Color.Gray
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(text = optionText, modifier = Modifier.weight(1f), fontSize = 16.sp)
                                     
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    
+                                    // 2. The Option Text (Wrapped in a Box so MathJax height isn't crushed)
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        MathText(
+                                            text = optionText,
+                                            fontSizePx = 16,
+                                            textColorHex = hexTextColor
+                                        )
+                                    }
+                                    
+                                    // 3. The Correct/Incorrect Icons for Review Mode
                                     if (isReviewMode) {
-                                        if (isCorrectAnswer) Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
-                                        else if (isSelected) Icon(Icons.Default.Clear, tint = StatusNotAnsweredColor, contentDescription = "Incorrect")
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        if (isCorrectAnswer) {
+                                            Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
+                                        } else if (isSelected) {
+                                            Icon(Icons.Default.Clear, tint = StatusNotAnsweredColor, contentDescription = "Incorrect")
+                                        }
                                     }
                                 }
                             }
@@ -918,4 +935,3 @@ fun MathText(
         }
     )
 }
-
