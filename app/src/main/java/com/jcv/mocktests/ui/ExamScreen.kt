@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +48,12 @@ val StatusNotVisitedColor = Color(0xFFFFFFFF)
 
 enum class ExamStep { INSTRUCTIONS, EXAM, SUBMIT_CONFIRM }
 
+data class ExamSection(
+    val name: String,
+    val questions: List<Question>,
+    val globalStartIndex: Int
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExamScreen(
@@ -60,13 +68,15 @@ fun ExamScreen(
     val prefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) }
     val prefKey = "exam_state_${courseId}_${testName}"
 
-    var questions by remember { mutableStateOf<List<Question>>(emptyList()) }
-    val questionStates = remember { mutableStateListOf<QuestionState>() }
+    var sections by remember { mutableStateOf<List<ExamSection>>(emptyList()) }
+    val questionStates = remember { mutableStateListOf<MutableList<QuestionState>>() }
     
     // UI State Management
     var examStep by remember { mutableStateOf(if (isReviewMode) ExamStep.EXAM else ExamStep.INSTRUCTIONS) }
+    var currentSecIndex by remember { mutableIntStateOf(0) }
     var currentQIndex by remember { mutableIntStateOf(0) }
     var timeLeft by remember { mutableIntStateOf(0) }
+    var totalQuestions by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var hasAgreedToRules by remember { mutableStateOf(false) }
 
@@ -80,8 +90,12 @@ fun ExamScreen(
 
     // Helper function to save progress locally
     fun saveProgressLocally() {
-        if (isReviewMode || questions.isEmpty()) return
-        val statesString = questionStates.joinToString(";") { "${it.status.name},${it.selectedOption ?: -1}" }
+        if (isReviewMode || sections.isEmpty()) return
+        
+        // Flatten the 2D state array into a string for SharedPreferences
+        val flatStates = questionStates.flatten()
+        val statesString = flatStates.joinToString(";") { "${it.status.name},${it.selectedOption ?: -1}" }
+        
         prefs.edit()
             .putString(prefKey, statesString)
             .putInt("${prefKey}_time", timeLeft)
@@ -98,51 +112,64 @@ fun ExamScreen(
                     val testsMap = data?.get("tests") as? Map<String, Any>
                     val specificTest = testsMap?.get(testName) as? Map<String, List<Map<String, Any>>>
                     
-                    val parsedQuestions = mutableListOf<Question>()
-                    specificTest?.values?.forEach { sectionQuestions ->
-                        sectionQuestions.forEach { qMap ->
-                            parsedQuestions.add(
-                                Question(
-                                    id = (qMap["id"] as? Number)?.toInt() ?: 0,
-                                    text = qMap["text"] as? String ?: "",
-                                    options = qMap["options"] as? List<String> ?: emptyList(),
-                                    correct = (qMap["correct"] as? Number)?.toInt() ?: 0
-                                )
+                    val parsedSections = mutableListOf<ExamSection>()
+                    var globalIndex = 0
+                    
+                    specificTest?.forEach { (secName, qList) ->
+                        val sectionQs = qList.map { qMap ->
+                            Question(
+                                id = (qMap["id"] as? Number)?.toInt() ?: 0,
+                                text = qMap["text"] as? String ?: "",
+                                options = qMap["options"] as? List<String> ?: emptyList(),
+                                correct = (qMap["correct"] as? Number)?.toInt() ?: 0
                             )
                         }
+                        parsedSections.add(ExamSection(secName, sectionQs, globalIndex))
+                        globalIndex += sectionQs.size
                     }
-                    questions = parsedQuestions
+                    
+                    sections = parsedSections
+                    totalQuestions = globalIndex
                     questionStates.clear()
                     
                     // Attempt to restore saved state
                     val savedStatesStr = prefs.getString(prefKey, "")
-                    val savedTime = prefs.getInt("${prefKey}_time", parsedQuestions.size * 60)
+                    val savedTime = prefs.getInt("${prefKey}_time", totalQuestions * 60)
                     
                     if (!savedStatesStr.isNullOrBlank()) {
                         try {
-                            val restored = savedStatesStr.split(";").map {
+                            val restoredFlat = savedStatesStr.split(";").map {
                                 val parts = it.split(",")
                                 QuestionState(
                                     status = QuestionStatus.valueOf(parts[0]),
                                     selectedOption = parts[1].toInt().takeIf { opt -> opt != -1 }
                                 )
                             }
-                            if (restored.size == parsedQuestions.size) {
-                                questionStates.addAll(restored)
+                            if (restoredFlat.size == totalQuestions) {
+                                var offset = 0
+                                parsedSections.forEach { sec ->
+                                    val secStates = restoredFlat.subList(offset, offset + sec.questions.size).toMutableList()
+                                    questionStates.add(secStates)
+                                    offset += sec.questions.size
+                                }
                             } else {
-                                questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                                throw Exception("Size mismatch")
                             }
                         } catch (e: Exception) {
-                            questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                            parsedSections.forEach { sec ->
+                                questionStates.add(MutableList(sec.questions.size) { QuestionState() })
+                            }
                         }
                     } else {
-                        questionStates.addAll(List(parsedQuestions.size) { QuestionState() })
+                        parsedSections.forEach { sec ->
+                            questionStates.add(MutableList(sec.questions.size) { QuestionState() })
+                        }
                     }
                     
                     if (!isReviewMode) {
                         timeLeft = savedTime 
-                        if (questions.isNotEmpty() && questionStates[0].status == QuestionStatus.NOT_VISITED) {
-                            questionStates[0] = questionStates[0].copy(status = QuestionStatus.NOT_ANSWERED)
+                        if (sections.isNotEmpty() && questionStates[0][0].status == QuestionStatus.NOT_VISITED) {
+                            questionStates[0][0] = questionStates[0][0].copy(status = QuestionStatus.NOT_ANSWERED)
                         }
                     }
                 }
@@ -159,19 +186,47 @@ fun ExamScreen(
         }
     }
 
+    fun moveToNextQuestion() {
+        if (currentQIndex < sections[currentSecIndex].questions.size - 1) {
+            currentQIndex++
+            if (!isReviewMode && questionStates[currentSecIndex][currentQIndex].status == QuestionStatus.NOT_VISITED) {
+                questionStates[currentSecIndex][currentQIndex] = questionStates[currentSecIndex][currentQIndex].copy(status = QuestionStatus.NOT_ANSWERED)
+                saveProgressLocally()
+            }
+        } else if (currentSecIndex < sections.size - 1) {
+            currentSecIndex++
+            currentQIndex = 0
+            if (!isReviewMode && questionStates[currentSecIndex][currentQIndex].status == QuestionStatus.NOT_VISITED) {
+                questionStates[currentSecIndex][currentQIndex] = questionStates[currentSecIndex][currentQIndex].copy(status = QuestionStatus.NOT_ANSWERED)
+                saveProgressLocally()
+            }
+        } else {
+            if (!isReviewMode) examStep = ExamStep.SUBMIT_CONFIRM else onExitReview()
+        }
+    }
+
+    fun moveToPrevQuestion() {
+        if (currentQIndex > 0) {
+            currentQIndex--
+        } else if (currentSecIndex > 0) {
+            currentSecIndex--
+            currentQIndex = sections[currentSecIndex].questions.size - 1
+        }
+    }
+
     if (isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
     }
 
     // ----------------------------------------------------------------------------------
-    // STEP 1: INSTRUCTIONS SCREEN
+    // STEP 1: INSTRUCTIONS SCREEN (Exact HTML Match)
     // ----------------------------------------------------------------------------------
     if (examStep == ExamStep.INSTRUCTIONS) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(testName, color = Color.White, fontWeight = FontWeight.Bold) },
+                    title = { Text(testName, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
                         IconButton(onClick = onExitReview) { Icon(Icons.Default.ArrowBack, tint = Color.White, contentDescription = "Back") }
                     },
@@ -182,8 +237,12 @@ fun ExamScreen(
                 Surface(shadowElevation = 8.dp) {
                     Column(modifier = Modifier.fillMaxWidth().background(Color.White).padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = hasAgreedToRules, onCheckedChange = { hasAgreedToRules = it })
-                            Text("I have read and understood the instructions.", fontSize = 14.sp)
+                            Checkbox(
+                                checked = hasAgreedToRules, 
+                                onCheckedChange = { hasAgreedToRules = it },
+                                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF1E90FF))
+                            )
+                            Text("Choose Language: English | I have read and understood the instructions.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         Button(
                             onClick = { 
@@ -194,7 +253,7 @@ fun ExamScreen(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
                         ) {
-                            Text("Start Test", fontWeight = FontWeight.Bold)
+                            Text(if (timeLeft < totalQuestions * 60) "Resume Test" else "Start Test", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -207,37 +266,75 @@ fun ExamScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                Text("Please read the following instructions carefully", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+                Text("Please read the following instructions carefully", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp).fillMaxWidth(), textAlign = TextAlign.Center)
                 
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Total Questions: ${questions.size}", fontWeight = FontWeight.Bold)
-                        Text("Total Time Available: ${questions.size} Mins", fontWeight = FontWeight.Bold)
+                Text("Total Number of Questions: $totalQuestions", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Total Time Available: ${totalQuestions} Mins", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(bottom = 16.dp))
+
+                // Section Details Table
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                    border = border(1.dp, Color.LightGray),
+                    color = Color.White
+                ) {
+                    Column {
+                        Row(modifier = Modifier.background(Color(0xFFF3F4F6)).padding(8.dp)) {
+                            Text("Section Name", modifier = Modifier.weight(1.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Qs", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                            Text("Max", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                            Text("Marks", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                            Text("Neg", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        }
+                        Divider(color = Color.LightGray)
+                        sections.forEach { sec ->
+                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(sec.name, modifier = Modifier.weight(1.5f), fontSize = 12.sp)
+                                Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text("1", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text("0", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                            }
+                            Divider(color = Color.LightGray)
+                        }
                     }
                 }
 
-                Text("Color Legend:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 24.dp)) {
+                // Legend
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 24.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(24.dp).background(StatusNotVisitedColor, RoundedCornerShape(4.dp)).border(1.dp, Color.Gray, RoundedCornerShape(4.dp)))
-                        Text(" You have not visited the question yet.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                        Box(modifier = Modifier.size(28.dp).background(StatusNotVisitedColor, RoundedCornerShape(4.dp)).border(1.dp, Color.Gray, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) { Text("1", fontSize = 12.sp) }
+                        Text(" You have not visited the question yet.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(24.dp).background(StatusNotAnsweredColor, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)))
-                        Text(" You have not answered the question.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                        Box(modifier = Modifier.size(28.dp).background(StatusNotAnsweredColor, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)), contentAlignment = Alignment.Center) { Text("3", color = Color.White, fontSize = 12.sp) }
+                        Text(" You have not answered the question.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(24.dp).background(StatusAnsweredColor, RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 8.dp, bottomEnd = 8.dp)))
-                        Text(" You have answered the question.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                        Box(modifier = Modifier.size(28.dp).background(StatusAnsweredColor, RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 8.dp, bottomEnd = 8.dp)), contentAlignment = Alignment.Center) { Text("5", color = Color.White, fontSize = 12.sp) }
+                        Text(" You have answered the question.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(24.dp).background(StatusMarkedColor, CircleShape))
-                        Text(" Marked for review without answering.", fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                        Box(modifier = Modifier.size(28.dp).background(StatusMarkedColor, CircleShape), contentAlignment = Alignment.Center) { Text("7", color = Color.White, fontSize = 12.sp) }
+                        Text(" You have NOT answered the question, but have marked the question for review.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(28.dp).background(StatusMarkedColor, CircleShape), contentAlignment = Alignment.Center) { 
+                            Text("9", color = Color.White, fontSize = 12.sp)
+                            Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp).size(12.dp).background(Color(0xFF2ECC71), CircleShape).border(1.dp, Color.White, CircleShape))
+                        }
+                        Text(" You have answered the question, but marked it for review.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
-                
-                Text("General Rules:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                Text("1. The clock has been set at the server and will display the remaining time at the top of your screen.\n2. Click 'Save & Next' to save your answer.\n3. Click 'Mark for Review' if you want to double-check your answer later.\n4. You can navigate between questions using the Palette menu.", fontSize = 14.sp, lineHeight = 22.sp)
+
+                // General Rules Detailed
+                Text("General Instructions:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
+                Text("1. Total of ${totalQuestions} Mins duration will be given to attempt all the questions.\n2. The clock has been set at the server and the countdown timer will display the time remaining.\n3. The question palette helps you navigate through the questions.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
+
+                Text("Navigating to a Question:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
+                Text("4. Click on the question number on the palette to go to that question directly.\n5. Click on Save and Next to save answer and move forward.\n6. Click on Mark for Review and Next to save answer, mark it, and move forward.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
+
+                Text("Navigating through Sections:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
+                Text("7. Sections are displayed on the top bar. Questions in a section can be viewed by clicking on the section name.\n8. After clicking Save & Next on the last question of a section, you will automatically be taken to the first question of the next section.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 32.dp))
             }
         }
         return
@@ -247,10 +344,11 @@ fun ExamScreen(
     // STEP 2: SUBMIT CONFIRMATION SCREEN
     // ----------------------------------------------------------------------------------
     if (examStep == ExamStep.SUBMIT_CONFIRM) {
-        val answered = questionStates.count { it.status == QuestionStatus.ANSWERED || it.status == QuestionStatus.ANSWERED_AND_MARKED }
-        val marked = questionStates.count { it.status == QuestionStatus.MARKED_FOR_REVIEW }
-        val notAnswered = questionStates.count { it.status == QuestionStatus.NOT_ANSWERED }
-        val notVisited = questionStates.count { it.status == QuestionStatus.NOT_VISITED }
+        val flatStates = questionStates.flatten()
+        val answered = flatStates.count { it.status == QuestionStatus.ANSWERED || it.status == QuestionStatus.ANSWERED_AND_MARKED }
+        val marked = flatStates.count { it.status == QuestionStatus.MARKED_FOR_REVIEW }
+        val notAnswered = flatStates.count { it.status == QuestionStatus.NOT_ANSWERED }
+        val notVisited = flatStates.count { it.status == QuestionStatus.NOT_VISITED }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
             Card(
@@ -293,9 +391,13 @@ fun ExamScreen(
                             onClick = {
                                 saveProgressLocally()
                                 var score = 0
-                                questions.forEachIndexed { i, q -> if (questionStates[i].selectedOption == q.correct) score++ }
+                                sections.forEachIndexed { sIdx, section ->
+                                    section.questions.forEachIndexed { qIdx, q ->
+                                        if (questionStates[sIdx][qIdx].selectedOption == q.correct) score++
+                                    }
+                                }
                                 localStorage.markTestAsAttempted(courseId, testName)
-                                onFinalSubmit(score, questions.size)
+                                onFinalSubmit(score, totalQuestions)
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
@@ -308,10 +410,11 @@ fun ExamScreen(
     }
 
     // ----------------------------------------------------------------------------------
-    // STEP 3: MAIN EXAM / REVIEW SHELL
+    // STEP 3: MAIN EXAM / REVIEW SHELL (Section-Based)
     // ----------------------------------------------------------------------------------
-    val currentQ = questions.getOrNull(currentQIndex) ?: return
-    val currentState = questionStates.getOrNull(currentQIndex) ?: QuestionState()
+    val currentSection = sections.getOrNull(currentSecIndex) ?: return
+    val currentQ = currentSection.questions.getOrNull(currentQIndex) ?: return
+    val currentState = questionStates[currentSecIndex][currentQIndex]
 
     // Wrap in RTL so the drawer opens from the right
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -348,11 +451,12 @@ fun ExamScreen(
                             // 2. Legend Section
                             Column(modifier = Modifier.padding(16.dp)) {
                                 if (!isReviewMode) {
-                                    val answered = questionStates.count { it.status == QuestionStatus.ANSWERED }
-                                    val notAnswered = questionStates.count { it.status == QuestionStatus.NOT_ANSWERED }
-                                    val marked = questionStates.count { it.status == QuestionStatus.MARKED_FOR_REVIEW }
-                                    val answeredMarked = questionStates.count { it.status == QuestionStatus.ANSWERED_AND_MARKED }
-                                    val notVisited = questionStates.count { it.status == QuestionStatus.NOT_VISITED }
+                                    val flatStates = questionStates.flatten()
+                                    val answered = flatStates.count { it.status == QuestionStatus.ANSWERED }
+                                    val notAnswered = flatStates.count { it.status == QuestionStatus.NOT_ANSWERED }
+                                    val marked = flatStates.count { it.status == QuestionStatus.MARKED_FOR_REVIEW }
+                                    val answeredMarked = flatStates.count { it.status == QuestionStatus.ANSWERED_AND_MARKED }
+                                    val notVisited = flatStates.count { it.status == QuestionStatus.NOT_VISITED }
 
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         LegendItem(answered, "Answered", StatusAnsweredColor, RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 8.dp, bottomEnd = 8.dp))
@@ -366,10 +470,15 @@ fun ExamScreen(
                                     Spacer(modifier = Modifier.height(8.dp))
                                     LegendItem(answeredMarked, "Answered & Marked", StatusMarkedColor, CircleShape, hasDot = true)
                                 } else {
-                                    val correct = questions.indices.count { i -> questionStates.getOrNull(i)?.selectedOption == questions[i].correct }
-                                    val incorrect = questions.indices.count { i -> questionStates.getOrNull(i)?.selectedOption != null && questionStates.getOrNull(i)?.selectedOption != questions[i].correct }
-                                    val skipped = questions.indices.count { i -> questionStates.getOrNull(i)?.selectedOption == null }
-
+                                    var correct = 0; var incorrect = 0; var skipped = 0
+                                    sections.forEachIndexed { sIdx, sec ->
+                                        sec.questions.forEachIndexed { qIdx, q ->
+                                            val state = questionStates[sIdx][qIdx]
+                                            if (state.selectedOption == null) skipped++
+                                            else if (state.selectedOption == q.correct) correct++
+                                            else incorrect++
+                                        }
+                                    }
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         LegendItem(correct, "Correct", StatusAnsweredColor, RoundedCornerShape(4.dp))
                                         LegendItem(incorrect, "Incorrect", StatusNotAnsweredColor, RoundedCornerShape(4.dp))
@@ -378,7 +487,7 @@ fun ExamScreen(
                                 }
                             }
 
-                            // 3. Grid Section
+                            // 3. Grid Section (Palette shows current SECTION questions only)
                             Column(modifier = Modifier.weight(1f).background(Color(0xFFF4F7FB)).padding(16.dp)) {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -386,9 +495,9 @@ fun ExamScreen(
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = if (isReviewMode) "REVIEW PALETTE" else "QUESTION PALETTE",
+                                        text = "${currentSection.name} Palette",
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                        textAlign = TextAlign.Center, color = Color(0xFF104E8B), fontWeight = FontWeight.Bold
+                                        textAlign = TextAlign.Center, color = Color(0xFF104E8B), fontWeight = FontWeight.Bold, fontSize = 14.sp
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -398,8 +507,8 @@ fun ExamScreen(
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                     modifier = Modifier.fillMaxSize()
                                 ) {
-                                    items(questions.size) { idx ->
-                                        val state = questionStates[idx]
+                                    items(currentSection.questions.size) { idx ->
+                                        val state = questionStates[currentSecIndex][idx]
                                         val shape = when (state.status) {
                                             QuestionStatus.ANSWERED -> RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 8.dp, bottomEnd = 8.dp)
                                             QuestionStatus.NOT_ANSWERED -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
@@ -408,7 +517,7 @@ fun ExamScreen(
                                         }
                                         val color = if (isReviewMode) {
                                             if (state.selectedOption == null) Color.White
-                                            else if (state.selectedOption == questions[idx].correct) StatusAnsweredColor
+                                            else if (state.selectedOption == currentSection.questions[idx].correct) StatusAnsweredColor
                                             else StatusNotAnsweredColor
                                         } else {
                                             when (state.status) {
@@ -432,15 +541,16 @@ fun ExamScreen(
                                                 )
                                                 .clickable {
                                                     currentQIndex = idx
-                                                    if (!isReviewMode && questionStates[idx].status == QuestionStatus.NOT_VISITED) {
-                                                        questionStates[idx] = questionStates[idx].copy(status = QuestionStatus.NOT_ANSWERED)
+                                                    if (!isReviewMode && questionStates[currentSecIndex][idx].status == QuestionStatus.NOT_VISITED) {
+                                                        questionStates[currentSecIndex][idx] = questionStates[currentSecIndex][idx].copy(status = QuestionStatus.NOT_ANSWERED)
                                                         saveProgressLocally()
                                                     }
                                                     scope.launch { drawerState.close() }
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text("${idx + 1}", color = textColor, fontWeight = FontWeight.Bold)
+                                            // The text displays the absolute global index to match HTML behavior
+                                            Text("${currentSection.globalStartIndex + idx + 1}", color = textColor, fontWeight = FontWeight.Bold)
                                             if (!isReviewMode && state.status == QuestionStatus.ANSWERED_AND_MARKED) {
                                                 Box(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(6.dp).background(Color.Green, CircleShape))
                                             }
@@ -471,38 +581,75 @@ fun ExamScreen(
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Scaffold(
                     topBar = {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (isReviewMode) Brush.horizontalGradient(listOf(Color(0xFF104E8B), Color(0xFF104E8B))) else JcvGradient)
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (isReviewMode) "REVIEW MODE" else "CBT Simulator",
-                                    color = Color.White, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                if (!isReviewMode) {
-                                    Row(
-                                        modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Info, contentDescription = "Time", tint = Color.White, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(String.format("%02d:%02d", timeLeft / 60, timeLeft % 60), color = Color.White, fontWeight = FontWeight.Bold)
+                        Column {
+                            // Main Top Bar
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(if (isReviewMode) Brush.horizontalGradient(listOf(Color(0xFF104E8B), Color(0xFF104E8B))) else JcvGradient)
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (isReviewMode) "REVIEW MODE" else "CBT Simulator",
+                                        color = Color.White, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    if (!isReviewMode) {
+                                        Row(
+                                            modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Info, contentDescription = "Time", tint = Color.White, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(String.format("%02d:%02d", timeLeft / 60, timeLeft % 60), color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                    } else {
+                                        Button(onClick = onExitReview, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F3A68))) {
+                                            Text("Exit Review")
+                                        }
                                     }
-                                } else {
-                                    Button(onClick = onExitReview, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F3A68))) {
-                                        Text("Exit Review")
+                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                        Icon(Icons.Default.Menu, contentDescription = "Palette", tint = Color.White)
                                     }
                                 }
-                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                    Icon(Icons.Default.Menu, contentDescription = "Palette", tint = Color.White)
+                            }
+                            // Section Tabs
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                itemsIndexed(sections) { idx, section ->
+                                    val isSelected = currentSecIndex == idx
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                color = if (isSelected) Color(0xFF1E90FF) else Color.White,
+                                                shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
+                                            )
+                                            .border(1.dp, if (isSelected) Color(0xFF1E90FF) else Color.LightGray, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
+                                            .clickable { 
+                                                currentSecIndex = idx
+                                                currentQIndex = 0
+                                                if (!isReviewMode && questionStates[idx][0].status == QuestionStatus.NOT_VISITED) {
+                                                    questionStates[idx][0] = questionStates[idx][0].copy(status = QuestionStatus.NOT_ANSWERED)
+                                                    saveProgressLocally()
+                                                }
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = section.name,
+                                            color = if (isSelected) Color.White else Color.DarkGray,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 14.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -513,26 +660,26 @@ fun ExamScreen(
                                 Column(modifier = Modifier.fillMaxWidth().background(Color(0xFFF9FAFB)).padding(8.dp)) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(
-                                            onClick = { if (currentQIndex > 0) currentQIndex-- },
+                                            onClick = { moveToPrevQuestion() },
                                             modifier = Modifier.weight(1f),
-                                            enabled = currentQIndex > 0
+                                            enabled = !(currentSecIndex == 0 && currentQIndex == 0)
                                         ) { Text("Prev") }
                                         
                                         OutlinedButton(
                                             onClick = {
-                                                questionStates[currentQIndex] = currentState.copy(
+                                                questionStates[currentSecIndex][currentQIndex] = currentState.copy(
                                                     status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED_AND_MARKED else QuestionStatus.MARKED_FOR_REVIEW
                                                 )
                                                 saveProgressLocally()
-                                                if (currentQIndex < questions.size - 1) currentQIndex++
+                                                moveToNextQuestion()
                                             },
                                             modifier = Modifier.weight(1f),
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusMarkedColor)
-                                        ) { Text("Mark") }
+                                        ) { Text("Mark", maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                         
                                         OutlinedButton(
                                             onClick = {
-                                                questionStates[currentQIndex] = currentState.copy(selectedOption = null, status = QuestionStatus.NOT_ANSWERED)
+                                                questionStates[currentSecIndex][currentQIndex] = currentState.copy(selectedOption = null, status = QuestionStatus.NOT_ANSWERED)
                                                 saveProgressLocally()
                                             },
                                             modifier = Modifier.weight(1f)
@@ -541,33 +688,29 @@ fun ExamScreen(
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Button(
                                         onClick = {
-                                            questionStates[currentQIndex] = currentState.copy(
+                                            questionStates[currentSecIndex][currentQIndex] = currentState.copy(
                                                 status = if (currentState.selectedOption != null) QuestionStatus.ANSWERED else QuestionStatus.NOT_ANSWERED
                                             )
                                             saveProgressLocally()
-                                            if (currentQIndex < questions.size - 1) {
-                                                currentQIndex++
-                                                if (questionStates[currentQIndex].status == QuestionStatus.NOT_VISITED) {
-                                                    questionStates[currentQIndex] = questionStates[currentQIndex].copy(status = QuestionStatus.NOT_ANSWERED)
-                                                    saveProgressLocally()
-                                                }
-                                            } else {
-                                                examStep = ExamStep.SUBMIT_CONFIRM
-                                            }
+                                            moveToNextQuestion()
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
-                                    ) { Text(if (currentQIndex == questions.size - 1) "Submit Exam" else "Save & Next") }
+                                    ) { Text(if (currentSecIndex == sections.size - 1 && currentQIndex == currentSection.questions.size - 1) "Submit Exam" else "Save & Next") }
                                 }
                             }
                         } else {
                             Surface(shadowElevation = 8.dp) {
                                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    OutlinedButton(onClick = { if (currentQIndex > 0) currentQIndex-- }, enabled = currentQIndex > 0) { Text("Previous") }
+                                    OutlinedButton(
+                                        onClick = { moveToPrevQuestion() }, 
+                                        enabled = !(currentSecIndex == 0 && currentQIndex == 0)
+                                    ) { Text("Previous") }
+                                    
                                     Button(
-                                        onClick = { if (currentQIndex < questions.size - 1) currentQIndex++ else onExitReview() },
+                                        onClick = { moveToNextQuestion() },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
-                                    ) { Text(if (currentQIndex == questions.size - 1) "Exit" else "Next") }
+                                    ) { Text(if (currentSecIndex == sections.size - 1 && currentQIndex == currentSection.questions.size - 1) "Exit" else "Next") }
                                 }
                             }
                         }
@@ -576,10 +719,10 @@ fun ExamScreen(
                     Column(modifier = Modifier.padding(padding).fillMaxSize()) {
                         // Info Bar
                         Row(
-                            modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).padding(8.dp),
+                            modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).border(1.dp, Color.LightGray).padding(8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Multiple Choice Question", fontSize = 12.sp, color = Color.DarkGray)
+                            Text("Question Type: Multiple Choice", fontSize = 12.sp, color = Color.DarkGray, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Marks: +1", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
                                 Text("Negative: 0", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
@@ -590,7 +733,7 @@ fun ExamScreen(
                         LazyColumn(modifier = Modifier.weight(1f).padding(16.dp)) {
                             item {
                                 Row(verticalAlignment = Alignment.Top) {
-                                    Text("Q ${currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    Text("Q ${currentSection.globalStartIndex + currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                     Text(currentQ.text, fontSize = 18.sp, lineHeight = 26.sp)
                                 }
                                 Spacer(modifier = Modifier.height(24.dp))
@@ -617,7 +760,7 @@ fun ExamScreen(
                                         .background(bgColor, RoundedCornerShape(8.dp))
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable(enabled = !isReviewMode) {
-                                            questionStates[currentQIndex] = currentState.copy(selectedOption = optIdx)
+                                            questionStates[currentSecIndex][currentQIndex] = currentState.copy(selectedOption = optIdx)
                                             saveProgressLocally()
                                         }
                                         .padding(12.dp),
@@ -647,6 +790,33 @@ fun ExamScreen(
                                     if (isReviewMode) {
                                         if (isCorrectAnswer) Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
                                         else if (isSelected) Icon(Icons.Default.Clear, tint = StatusNotAnsweredColor, contentDescription = "Incorrect")
+                                    }
+                                }
+                            }
+                            
+                            if (isReviewMode) {
+                                item {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    if (currentState.selectedOption == null) {
+                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)), border = border(1.dp, Color.LightGray)) {
+                                            Text("You skipped this question.", modifier = Modifier.padding(12.dp), color = Color.Gray, fontWeight = FontWeight.Bold)
+                                        }
+                                    } else if (currentState.selectedOption == currentQ.correct) {
+                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)), border = border(1.dp, StatusAnsweredColor.copy(alpha = 0.5f))) {
+                                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("You answered this correctly.", color = Color(0xFF166534), fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    } else {
+                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)), border = border(1.dp, StatusNotAnsweredColor.copy(alpha = 0.5f))) {
+                                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Clear, tint = StatusNotAnsweredColor, contentDescription = "Incorrect")
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("You answered this incorrectly.", color = Color(0xFF991B1B), fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
                                 }
                             }
