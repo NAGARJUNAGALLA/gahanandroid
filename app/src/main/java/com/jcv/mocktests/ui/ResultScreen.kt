@@ -10,13 +10,10 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun ResultScreen(
-    score: Float, // <-- CHANGED FROM Int TO Float
+    score: Int,
     totalQuestions: Int,
     onNavigateHome: () -> Unit
 ) {
-    // Format the score so 25.0 shows as 25, but 24.75 shows as 24.75
-    val displayScore = if (score % 1f == 0f) score.toInt().toString() else score.toString()
-
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -32,8 +29,7 @@ fun ResultScreen(
             ) {
                 Text("Your Score", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                // Use the new displayScore here
-                Text("$displayScore / $totalQuestions", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
+                Text("$score / $totalQuestions", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
             }
         }
         
