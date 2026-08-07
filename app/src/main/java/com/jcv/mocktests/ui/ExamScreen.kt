@@ -762,8 +762,8 @@ fun ExamScreen(
                                     if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray
                                 } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray
 
-                                // Determine text color based on selection/review mode
-                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) "#FFFFFF" else "#333333"
+                                
+                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) "#1976D2"" else "#333333"
 
                                 Row(
                                     modifier = Modifier
@@ -779,7 +779,7 @@ fun ExamScreen(
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // 1. The Circle with A, B, C, D
+                            
                                     Box(
                                         modifier = Modifier
                                             .size(28.dp)
@@ -801,7 +801,7 @@ fun ExamScreen(
                                     
                                     Spacer(modifier = Modifier.width(12.dp))
                                     
-                                    // 2. The Option Text (Wrapped in a Box so MathJax height isn't crushed)
+                                
                                     Box(modifier = Modifier.weight(1f)) {
                                         MathText(
                                             text = optionText,
@@ -810,7 +810,7 @@ fun ExamScreen(
                                         )
                                     }
                                     
-                                    // 3. The Correct/Incorrect Icons for Review Mode
+                                
                                     if (isReviewMode) {
                                         Spacer(modifier = Modifier.width(8.dp))
                                         if (isCorrectAnswer) {
@@ -856,7 +856,6 @@ fun ExamScreen(
     }
 }
 
-// Reusable Legend Item
 @Composable
 fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.ui.graphics.Shape, hasDot: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.width(130.dp)) {
@@ -908,8 +907,15 @@ fun MathText(
                     padding: 0;
                     background-color: transparent;
                     word-wrap: break-word;
+                    
+                    /* NEW: Disable text selection and mobile callouts */
+                    -webkit-touch-callout: none; 
+                    -webkit-user-select: none;   
+                    user-select: none;           
                 }
-                img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 4px; }
+                
+                /* pointer-events: none prevents long-pressing to save images */
+                img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 4px; pointer-events: none; }
             </style>
         </head>
         <body>
@@ -927,6 +933,11 @@ fun MathText(
                 webViewClient = WebViewClient()
                 settings.javaScriptEnabled = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                
+            
+                isLongClickable = false
+                setOnLongClickListener { true }
+                
                 loadDataWithBaseURL(null, htmlData, "text/html", "UTF-8", null)
             }
         },
