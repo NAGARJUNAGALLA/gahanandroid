@@ -1,5 +1,9 @@
 package com.jcv.mocktests
 
+import android.app.Activity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,7 +22,26 @@ import java.net.URLEncoder
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
         setContent {
+            // -----------------------------------------------------------------
+            // GLOBAL SYSTEM BAR THEMING
+            // -----------------------------------------------------------------
+            val view = LocalView.current
+            if (!view.isInEditMode) {
+                SideEffect {
+                    val window = (view.context as Activity).window
+                    
+                    // Set ThemeBlue (#1976D2) for both top and bottom device bars
+                    window.statusBarColor = android.graphics.Color.parseColor("#1976D2")
+                    window.navigationBarColor = android.graphics.Color.parseColor("#1976D2")
+                    
+                    // Ensures the battery, time, and navigation icons are white
+                    val insetsController = WindowCompat.getInsetsController(window, view)
+                    insetsController.isAppearanceLightStatusBars = false
+                    insetsController.isAppearanceLightNavigationBars = false
+                }
+            }
             MockTestsApp()
         }
     }
