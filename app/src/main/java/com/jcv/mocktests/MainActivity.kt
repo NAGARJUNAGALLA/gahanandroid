@@ -156,16 +156,30 @@ fun MockTestsApp() {
             )
         }
         
-        composable("results/{score}/{total}") { backStackEntry ->
-            val score = backStackEntry.arguments?.getString("score")?.toInt() ?: 0
-            val total = backStackEntry.arguments?.getString("total")?.toInt() ?: 0
-            ResultScreen(
-                score = score,
-                totalQuestions = total,
-                onNavigateHome = { 
-                    navController.navigate("main_dashboard/home") { popUpTo(0) } 
-                }
-            )
+        composable(
+    route = "results_screen/{score}/{totalQuestions}",
+    arguments = listOf(
+        // 1. Ensure this is FloatType
+        navArgument("score") { type = NavType.FloatType }, 
+        navArgument("totalQuestions") { type = NavType.IntType }
+    )
+) { backStackEntry ->
+    
+    // 2. THIS IS THE LINE CAUSING THE ERROR! 
+    // Change getInt to getFloat, and 0 to 0f
+    val finalScore = backStackEntry.arguments?.getFloat("score") ?: 0f 
+    
+    val total = backStackEntry.arguments?.getInt("totalQuestions") ?: 0
+    
+    ResultScreen(
+        score = finalScore, 
+        totalQuestions = total,
+        onNavigateHome = {
+            navController.navigate("main_dashboard/home") {
+                popUpTo(0)
+            }
         }
+    )
+}
     }
 }
