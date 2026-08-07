@@ -1,5 +1,8 @@
 package com.jcv.mocktests.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -273,10 +276,10 @@ fun ExamScreen(
 
                 // Section Details Table
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                    border = border(1.dp, Color.LightGray),
-                    color = Color.White
-                ) {
+    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+    border = BorderStroke(1.dp, Color.LightGray), // <-- Capitalized BorderStroke
+    color = Color.White
+){
                     Column {
                         Row(modifier = Modifier.background(Color(0xFFF3F4F6)).padding(8.dp)) {
                             Text("Section Name", modifier = Modifier.weight(1.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -798,11 +801,11 @@ fun ExamScreen(
                                 item {
                                     Spacer(modifier = Modifier.height(16.dp))
                                     if (currentState.selectedOption == null) {
-                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)), border = border(1.dp, Color.LightGray)) {
+                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)), border = BorderStroke(1.dp, Color.LightGray)) {
                                             Text("You skipped this question.", modifier = Modifier.padding(12.dp), color = Color.Gray, fontWeight = FontWeight.Bold)
                                         }
                                     } else if (currentState.selectedOption == currentQ.correct) {
-                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)), border = border(1.dp, StatusAnsweredColor.copy(alpha = 0.5f))) {
+                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)), border = BorderStroke(1.dp, StatusAnsweredColor.copy(alpha = 0.5f))) {
                                             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
                                                 Spacer(modifier = Modifier.width(8.dp))
@@ -810,7 +813,7 @@ fun ExamScreen(
                                             }
                                         }
                                     } else {
-                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)), border = border(1.dp, StatusNotAnsweredColor.copy(alpha = 0.5f))) {
+                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)), border = BorderStroke(1.dp, StatusNotAnsweredColor.copy(alpha = 0.5f))) {
                                             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(Icons.Default.Clear, tint = StatusNotAnsweredColor, contentDescription = "Incorrect")
                                                 Spacer(modifier = Modifier.width(8.dp))
