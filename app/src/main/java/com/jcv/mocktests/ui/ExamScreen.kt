@@ -858,7 +858,7 @@ fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = label, fontSize = 12.sp, color = Color(0xFF475569))
     }
-
+}
 
 @Composable
 fun MathText(
@@ -918,4 +918,4 @@ fun MathText(
         }
     )
 }
-}
+
