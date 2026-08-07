@@ -142,18 +142,30 @@ fun MockTestsApp() {
             val isReviewMode = backStackEntry.arguments?.getBoolean("isReviewMode") ?: false
             
             ExamScreen(
-                courseId = courseId,
-                testName = testName,
-                isReviewMode = isReviewMode,
-                onFinalSubmit = { score, total -> 
-                    navController.navigate("results/$score/$total") { 
-                        popUpTo("main_dashboard/home") 
-                    }
-                },
-                onExitReview = {
-                    navController.popBackStack()
-                }
-            )
+    courseId = courseId,
+    testName = testName,
+    isReviewMode = isReviewMode,
+    
+    // 1. ADD THESE TO ENABLE YOUR NEW FEATURE
+    positiveMark = 1f,      // Marks for a correct answer
+    negativeMark = 0.25f,   // Negative marks for a wrong answer (change as needed)
+    
+    onFinalSubmit = { score, total -> 
+        // 2. MAKE SURE THIS MATCHES YOUR NAVHOST ROUTE EXACTLY
+        // If your composable is "results/{score}/{total}", use this:
+        navController.navigate("results/$score/$total") { 
+            popUpTo("main_dashboard/home") 
+        }
+        
+        // OR, if your composable is "results_screen/{score}/{totalQuestions}", use this instead:
+        // navController.navigate("results_screen/$score/$total") { 
+        //     popUpTo("main_dashboard/home") 
+        // }
+    },
+    onExitReview = {
+        navController.popBackStack()
+    }
+)
         }
         
         composable(
