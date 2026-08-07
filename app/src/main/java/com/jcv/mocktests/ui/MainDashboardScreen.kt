@@ -40,7 +40,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
-enum class BottomTab { HOME, FREE_COURSES, PRO_COURSES, PURCHASED_COURSES }
+enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES }
 
 val ThemeBlue = Color(0xFF1976D2)
 val LightGreyBg = Color(0xFFF5F6FA)
@@ -78,7 +78,6 @@ fun MainDashboardScreen(
     var selectedTab by remember(initialTab) {
         mutableStateOf(
             when (initialTab) {
-                "free_courses" -> BottomTab.FREE_COURSES
                 "pro_courses" -> BottomTab.PRO_COURSES
                 "purchased_courses" -> BottomTab.PURCHASED_COURSES
                 else -> BottomTab.HOME
@@ -94,11 +93,11 @@ fun MainDashboardScreen(
     val scope = rememberCoroutineScope()
 
     var allCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
-    var freeCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var proCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var purchasedCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     
-    // Payment Tracking States
+    // Status Tracking States
+    var approvedSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var pendingSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var rejectedSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var showPaymentDialog by remember { mutableStateOf<CourseModel?>(null) }
@@ -138,12 +137,11 @@ fun MainDashboardScreen(
                     CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3])
                 } else null
             }
-            val approvedSheetIds = cachedPurchasedStr.split(",").filter { it.isNotBlank() }
+            approvedSheetIds = cachedPurchasedStr.split(",").filter { it.isNotBlank() }
             pendingSheetIds = cachedPendingStr.split(",").filter { it.isNotBlank() }
             rejectedSheetIds = cachedRejectedStr.split(",").filter { it.isNotBlank() }
             
             allCourses = parsedCourses
-            freeCourses = parsedCourses.filter { it.fee == 0.0 }
             purchasedCourses = parsedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
             proCourses = parsedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
             
@@ -171,12 +169,11 @@ fun MainDashboardScreen(
                         PaymentModel(sheetId, status)
                     }
                     
-                    val approvedSheetIds = payments.filter { it.status == "approved" }.map { it.sheetId }
+                    approvedSheetIds = payments.filter { it.status == "approved" }.map { it.sheetId }
                     pendingSheetIds = payments.filter { it.status == "pending" }.map { it.sheetId }
                     rejectedSheetIds = payments.filter { it.status == "rejected" }.map { it.sheetId }
                     
                     allCourses = fetchedCourses
-                    freeCourses = fetchedCourses.filter { it.fee == 0.0 }
                     purchasedCourses = fetchedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
                     proCourses = fetchedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
                     isLoading = false
@@ -191,7 +188,6 @@ fun MainDashboardScreen(
                 }
             } else {
                 allCourses = fetchedCourses
-                freeCourses = fetchedCourses.filter { it.fee == 0.0 }
                 proCourses = fetchedCourses.filter { it.fee > 0.0 }
                 isLoading = false
                 
@@ -204,20 +200,21 @@ fun MainDashboardScreen(
         }
     }
 
-    // INTERCEPT CLICKS AND MANAGE PAYMENTS
+    // INTERCEPT CLICKS AND MANAGE REGISTRATIONS
     val handleCourseClick: (CourseModel) -> Unit = { course ->
         if (course.sheetId.isBlank()) {
             Toast.makeText(context, "Error: Course ID is missing. Please contact admin.", Toast.LENGTH_SHORT).show()
-        } else if (course.fee == 0.0 || purchasedCourses.any { it.sheetId == course.sheetId }) {
+        } else if (approvedSheetIds.contains(course.sheetId)) {
+            // Unlocked if Approved
             onNavigateToCourse(course.sheetId)
         } else if (pendingSheetIds.contains(course.sheetId)) {
-            Toast.makeText(context, "Your payment is currently under review by the admin. Please check back later.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Your registration is currently under review by the admin. Please check back later.", Toast.LENGTH_LONG).show()
         } else {
             showPaymentDialog = course
         }
     }
 
-    // PAYMENT MODAL OVERLAY
+    // REGISTRATION / PAYMENT MODAL OVERLAY
     showPaymentDialog?.let { course ->
         PaymentDialog(
             course = course,
@@ -249,10 +246,10 @@ fun MainDashboardScreen(
                     .addOnSuccessListener {
                         isSubmittingPayment = false
                         showPaymentDialog = null
-                        // Immediately update local UI state so they don't see "Rejected" anymore
+                        // Immediately update local UI state
                         pendingSheetIds = pendingSheetIds + course.sheetId
                         rejectedSheetIds = rejectedSheetIds - course.sheetId 
-                        Toast.makeText(context, "Payment details submitted successfully!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Registration submitted successfully!", Toast.LENGTH_LONG).show()
                     }
                     .addOnFailureListener { e ->
                         isSubmittingPayment = false
@@ -296,13 +293,6 @@ fun MainDashboardScreen(
                     )
 
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    if (freeCourses.isNotEmpty()) {
-                        DrawerSectionHeader("FREE COURSES", Icons.Default.Star, Color(0xFF4CAF50))
-                        freeCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { handleCourseClick(course) }
-                        }
-                    }
 
                     if (purchasedCourses.isNotEmpty()) {
                         DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
@@ -376,14 +366,6 @@ fun MainDashboardScreen(
                     )
                     
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Star, contentDescription = "Free Courses") },
-                        label = { Text("Free Courses", fontSize = 10.sp) },
-                        selected = selectedTab == BottomTab.FREE_COURSES,
-                        onClick = { selectedTab = BottomTab.FREE_COURSES },
-                        colors = navColors()
-                    )
-                    
-                    NavigationBarItem(
                         icon = { Icon(Icons.Default.Star, contentDescription = "Pro Courses") },
                         label = { Text("Pro Courses", fontSize = 10.sp) },
                         selected = selectedTab == BottomTab.PRO_COURSES,
@@ -409,17 +391,12 @@ fun MainDashboardScreen(
                     BottomTab.HOME -> {
                         DashboardHomeContent(
                             allCourses = allCourses,
-                            freeCourses = freeCourses,
                             purchasedCourses = purchasedCourses,
                             proCourses = proCourses,
                             auth = auth,
                             isLoading = isLoading,
                             onCourseClick = handleCourseClick
                         )
-                    }
-                    BottomTab.FREE_COURSES -> {
-                        if (isLoading && freeCourses.isEmpty()) LoadingLogo() 
-                        else CourseGridScreen("Free Courses", freeCourses, handleCourseClick)
                     }
                     BottomTab.PRO_COURSES -> {
                         if (isLoading && proCourses.isEmpty()) LoadingLogo() 
@@ -436,7 +413,7 @@ fun MainDashboardScreen(
 }
 
 // ---------------------------------------------------------------------------
-// PAYMENT MODAL DIALOG (QR CODE & REJECTION HANDLING)
+// PAYMENT MODAL DIALOG (QR CODE + APP INTENT)
 // ---------------------------------------------------------------------------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -453,8 +430,10 @@ fun PaymentDialog(
     var selectedApp by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var utr by remember { mutableStateOf("") }
+    var hasClickedPay by remember(isRejected) { mutableStateOf(isRejected) }
     val apps = listOf("PhonePe", "Google Pay (GPay)", "Paytm", "Other")
-
+    val context = LocalContext.current
+    
     // Generate Dynamic QR URL
     val qrUrl = remember(upiId, staticQrUrl, course.fee) {
         if (upiId.isNotBlank()) {
@@ -482,9 +461,7 @@ fun PaymentDialog(
         },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("₹${course.fee.toInt()}", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color.DarkGray)
@@ -495,17 +472,49 @@ fun PaymentDialog(
                         modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()
                     ) {
                         Text(
-                            text = "Your previous registration was rejected.\nPlease pay the fee or check your UTR number and resend.",
+                            text = "Your previous payment was rejected.\n\nPlease click Pay Now again, OR scan the QR and re-enter your UTR.",
                             color = Color(0xFFC62828), fontSize = 12.sp, modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
                 
-                Text(
-                    "Scan the QR code below to pay. If already paid, submit your UTR.",
-                    fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 8.dp)
-                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        if (upiId.isNotBlank()) {
+                            val uriString = "upi://pay?pa=$upiId&pn=${java.net.URLEncoder.encode(merchantName, "UTF-8")}&am=${course.fee}&cu=INR"
+                            val uri = android.net.Uri.parse(uriString)
+                            val intent = Intent(Intent.ACTION_VIEW, uri)
+                            
+                            val chooser = Intent.createChooser(intent, "Pay securely with")
+                            
+                            try {
+                                context.startActivity(chooser)
+                                hasClickedPay = true
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No UPI app found on your phone.", Toast.LENGTH_LONG).show()
+                                hasClickedPay = true 
+                            }
+                        } else {
+                            Toast.makeText(context, "UPI ID is not configured. Please contact the Admin.", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), 
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("PAY NOW", fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
+                }
                 
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "OR scan the QR code below to pay manually",
+                    fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 8.dp)
+                )
+
                 // ACTUAL QR CODE
                 Box(
                     modifier = Modifier
@@ -561,40 +570,45 @@ fun PaymentDialog(
                                 onClick = {
                                     selectedApp = app
                                     expanded = false
+                                    hasClickedPay = true // User is doing it manually
                                 }
                             )
                         }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = utr,
-                    onValueChange = { utr = it },
-                    label = { Text("Transaction / UTR Number") },
-                    placeholder = { Text("e.g. 123456789012") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = ThemeBlue,
-                        focusedLabelColor = ThemeBlue
+                // SHOW UTR INPUT IF "PAY NOW" WAS CLICKED, APP SELECTED, OR PREVIOUSLY REJECTED
+                if (hasClickedPay || selectedApp.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = utr,
+                        onValueChange = { utr = it },
+                        label = { Text("Transaction / UTR Number") },
+                        placeholder = { Text("e.g. 123456789012") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ThemeBlue,
+                            focusedLabelColor = ThemeBlue
+                        )
                     )
-                )
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onSubmit(selectedApp, utr) },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                enabled = selectedApp.isNotBlank() && utr.isNotBlank() && !isSubmitting,
-                colors = ButtonDefaults.buttonColors(containerColor = ThemeBlue),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                if (isSubmitting) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                } else {
-                    Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White)
+            if (hasClickedPay || selectedApp.isNotBlank()) {
+                Button(
+                    onClick = { onSubmit(if(selectedApp.isNotBlank()) selectedApp else "Direct UPI", utr) }, 
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    enabled = utr.isNotBlank() && !isSubmitting,
+                    colors = ButtonDefaults.buttonColors(containerColor = ThemeBlue),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
             }
         },
@@ -661,7 +675,6 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
 @Composable
 fun DashboardHomeContent(
     allCourses: List<CourseModel>,
-    freeCourses: List<CourseModel>,
     purchasedCourses: List<CourseModel>,
     proCourses: List<CourseModel>,
     auth: FirebaseAuth,
@@ -671,7 +684,7 @@ fun DashboardHomeContent(
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     
     val homeCategories = listOf(
-        "Free Courses", "Pro Courses", "Purchased", 
+        "Pro Courses", "Purchased", 
         "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET"
     )
 
@@ -681,8 +694,8 @@ fun DashboardHomeContent(
             UserProfileHeader(auth)
             
             Text(
-                text = "Welcome to JCV MOCK Tests and Thanks for Choosing JCV MOCK TESTS",
-                color = ThemeBlue,
+                text = "🔥 Welcome to JCV MOCK Tests 🔥 Thanks for Choosing JCV MOCK TESTS",
+                color = RedBadgeColor,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -711,7 +724,6 @@ fun DashboardHomeContent(
     } else {
         val displayedCourses = remember(selectedCategory, allCourses) {
             when (selectedCategory) {
-                "Free Courses" -> freeCourses
                 "Pro Courses" -> proCourses
                 "Purchased" -> purchasedCourses
                 "AP TET" -> allCourses.filter { it.title.contains("TET", ignoreCase = true) }
@@ -875,8 +887,7 @@ fun CourseGridScreen(title: String, courses: List<CourseModel>, onCourseClick: (
 
 @Composable
 fun CourseCardView(course: CourseModel, backgroundColor: Color, onClick: () -> Unit) {
-    val isFree = course.fee == 0.0
-    val originalPrice = if (!isFree) course.fee * 1.5 else 0.0 
+    val originalPrice = course.fee * 1.5
     
     val context = LocalContext.current
     
@@ -967,18 +978,16 @@ fun CourseCardView(course: CourseModel, backgroundColor: Color, onClick: () -> U
                     Column {
                         Text("₹", fontSize = 10.sp, color = Color.DarkGray)
                         Text(
-                            text = if (isFree) "Free" else course.fee.toInt().toString(), 
+                            text = course.fee.toInt().toString(), 
                             fontSize = 14.sp, 
                             color = Color.Black,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     
-                    if (!isFree) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("₹${originalPrice.toInt()}", fontSize = 10.sp, color = Color.DarkGray, textDecoration = TextDecoration.LineThrough)
-                            Text("30% OFF", fontSize = 10.sp, color = RedBadgeColor, fontWeight = FontWeight.Bold)
-                        }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("₹${originalPrice.toInt()}", fontSize = 10.sp, color = Color.DarkGray, textDecoration = TextDecoration.LineThrough)
+                        Text("30% OFF", fontSize = 10.sp, color = RedBadgeColor, fontWeight = FontWeight.Bold)
                     }
                 }
             }
