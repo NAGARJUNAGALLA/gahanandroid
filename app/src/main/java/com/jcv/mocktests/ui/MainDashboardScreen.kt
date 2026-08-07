@@ -803,7 +803,7 @@ fun UserProfileHeader(auth: FirebaseAuth) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
-                painter = painterResource(id = R.mipmap.ic_launcher), // Or R.drawable.logo if you have it
+                painter = painterResource(id = R.drawable.logo), 
                 contentDescription = "App Logo",
                 modifier = Modifier
                     .size(80.dp)
