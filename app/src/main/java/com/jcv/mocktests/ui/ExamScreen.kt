@@ -1,5 +1,8 @@
 package com.jcv.mocktests.ui
 
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -737,7 +740,12 @@ fun ExamScreen(
                             item {
                                 Row(verticalAlignment = Alignment.Top) {
                                     Text("Q ${currentSection.globalStartIndex + currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                    Text(currentQ.text, fontSize = 18.sp, lineHeight = 26.sp)
+
+MathText(
+    text = currentQ.text, 
+    fontSizePx = 18,
+    modifier = Modifier.weight(1f)
+)
                                 }
                                 Spacer(modifier = Modifier.height(24.dp))
                             }
@@ -850,4 +858,64 @@ fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = label, fontSize = 12.sp, color = Color(0xFF475569))
     }
+
+
+@Composable
+fun MathText(
+    text: String,
+    modifier: Modifier = Modifier,
+    textColorHex: String = "#333333",
+    fontSizePx: Int = 16
+) {
+    val htmlData = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <script>
+                MathJax = {
+                    tex: {
+                        inlineMath: [['$', '$'], ['\\(', '\\)']],
+                        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+                    },
+                    startup: { typeset: true }
+                };
+            </script>
+            <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+            <style>
+                body {
+                    font-family: sans-serif;
+                    font-size: ${fontSizePx}px;
+                    color: $textColorHex;
+                    margin: 0;
+                    padding: 0;
+                    background-color: transparent;
+                    word-wrap: break-word;
+                }
+                img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 4px; }
+            </style>
+        </head>
+        <body>
+            $text
+        </body>
+        </html>
+    """.trimIndent()
+
+    AndroidView(
+        modifier = modifier
+            .fillMaxWidth()
+            .wrapContentHeight(),
+        factory = { context ->
+            WebView(context).apply {
+                webViewClient = WebViewClient()
+                settings.javaScriptEnabled = true
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                loadDataWithBaseURL(null, htmlData, "text/html", "UTF-8", null)
+            }
+        },
+        update = { webView ->
+            webView.loadDataWithBaseURL(null, htmlData, "text/html", "UTF-8", null)
+        }
+    )
+}
 }
