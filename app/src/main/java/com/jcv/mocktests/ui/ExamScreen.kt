@@ -66,9 +66,7 @@ fun ExamScreen(
     courseId: String,
     testName: String,
     isReviewMode: Boolean = false, 
-    positiveMark: Float = 1f, 
-    negativeMark: Float = 0f, 
-    onFinalSubmit: (Float, Int) -> Unit, 
+    onFinalSubmit: (Int, Int) -> Unit, // BACK TO INT
     onExitReview: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -100,7 +98,6 @@ fun ExamScreen(
     fun saveProgressLocally() {
         if (isReviewMode || sections.isEmpty()) return
         
-        // Flatten the 2D state array into a string for SharedPreferences
         val flatStates = questionStates.flatten()
         val statesString = flatStates.joinToString(";") { "${it.status.name},${it.selectedOption ?: -1}" }
         
@@ -140,7 +137,6 @@ fun ExamScreen(
                     totalQuestions = globalIndex
                     questionStates.clear()
                     
-                    // Attempt to restore saved state
                     val savedStatesStr = prefs.getString(prefKey, "")
                     val savedTime = prefs.getInt("${prefKey}_time", totalQuestions * 60)
                     
@@ -185,12 +181,11 @@ fun ExamScreen(
             }
     }
 
-    // Timer logic
     LaunchedEffect(key1 = timeLeft, key2 = isLoading, key3 = examStep) {
         if (!isReviewMode && !isLoading && timeLeft > 0 && examStep == ExamStep.EXAM) {
             delay(1000L)
             timeLeft--
-            if (timeLeft % 10 == 0) saveProgressLocally() // Auto-save every 10 seconds
+            if (timeLeft % 10 == 0) saveProgressLocally() 
         }
     }
 
@@ -227,9 +222,6 @@ fun ExamScreen(
         return
     }
 
-    // ----------------------------------------------------------------------------------
-    // STEP 1: INSTRUCTIONS SCREEN 
-    // ----------------------------------------------------------------------------------
     if (examStep == ExamStep.INSTRUCTIONS) {
         Scaffold(
             topBar = {
@@ -279,7 +271,6 @@ fun ExamScreen(
                 Text("Total Number of Questions: $totalQuestions", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Text("Total Time Available: ${totalQuestions} Mins", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(bottom = 16.dp))
 
-                // Section Details Table
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                     border = BorderStroke(1.dp, Color.LightGray),
@@ -299,27 +290,14 @@ fun ExamScreen(
                                 Text(sec.name, modifier = Modifier.weight(1.5f), fontSize = 12.sp)
                                 Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
                                 Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
-                                
-                                val posDisplay = if (positiveMark % 1f == 0f) {
-                                    positiveMark.toInt().toString()
-                                } else {
-                                    positiveMark.toString()
-                                }
-                                val negDisplay = if (negativeMark % 1f == 0f) {
-                                    negativeMark.toInt().toString()
-                                } else {
-                                    negativeMark.toString()
-                                }
-                                
-                                Text(posDisplay, modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
-                                Text(negDisplay, modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text("1", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text("0", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
                             }
                             Divider(color = Color.LightGray)
                         }
                     }
                 }
 
-                // Legend
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 24.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(28.dp).background(StatusNotVisitedColor, RoundedCornerShape(4.dp)).border(1.dp, Color.Gray, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) { Text("1", fontSize = 12.sp) }
@@ -346,7 +324,6 @@ fun ExamScreen(
                     }
                 }
 
-                // General Rules Detailed
                 Text("General Instructions:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
                 Text("1. Total of ${totalQuestions} Mins duration will be given to attempt all the questions.\n2. The clock has been set at the server and the countdown timer will display the time remaining.\n3. The question palette helps you navigate through the questions.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
 
@@ -360,9 +337,6 @@ fun ExamScreen(
         return
     }
 
-    // ----------------------------------------------------------------------------------
-    // STEP 2: SUBMIT CONFIRMATION SCREEN
-    // ----------------------------------------------------------------------------------
     if (examStep == ExamStep.SUBMIT_CONFIRM) {
         val flatStates = questionStates.flatten()
         val answered = flatStates.count { it.status == QuestionStatus.ANSWERED || it.status == QuestionStatus.ANSWERED_AND_MARKED }
@@ -383,7 +357,6 @@ fun ExamScreen(
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    // Stats Grid
                     Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(answered.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusAnsweredColor)
@@ -411,22 +384,16 @@ fun ExamScreen(
                             onClick = {
                                 saveProgressLocally()
                                 
-                                var finalScore = 0f
+                                // REVERTED TO INTEGER SCORING (NO NEGATIVE MARKS)
+                                var score = 0
                                 sections.forEachIndexed { sIdx, section ->
                                     section.questions.forEachIndexed { qIdx, q ->
-                                        val userSelection = questionStates[sIdx][qIdx].selectedOption
-                                        if (userSelection != null) {
-                                            if (userSelection == q.correct) {
-                                                finalScore += positiveMark
-                                            } else {
-                                                finalScore -= negativeMark
-                                            }
-                                        }
+                                        if (questionStates[sIdx][qIdx].selectedOption == q.correct) score++
                                     }
                                 }
                                 
                                 localStorage.markTestAsAttempted(courseId, testName)
-                                onFinalSubmit(finalScore, totalQuestions)
+                                onFinalSubmit(score, totalQuestions)
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
@@ -438,32 +405,22 @@ fun ExamScreen(
         return
     }
 
-    // ----------------------------------------------------------------------------------
-    // STEP 3: MAIN EXAM / REVIEW SHELL (Section-Based)
-    // ----------------------------------------------------------------------------------
     val currentSection = sections.getOrNull(currentSecIndex) ?: return
     val currentQ = currentSection.questions.getOrNull(currentQIndex) ?: return
     val currentState = questionStates[currentSecIndex][currentQIndex]
 
-    // Wrap in RTL so the drawer opens from the right
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = drawerState,
             gesturesEnabled = drawerState.isOpen,
             drawerContent = {
-                // Flip drawer contents back to LTR
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     ModalDrawerSheet(
                         modifier = Modifier.width(320.dp),
                         drawerContainerColor = Color.White,
                         drawerShape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .background(Color.White)
-                        ) {
-                            // 1. Drawer Header (User Info)
+                        Column(modifier = Modifier.fillMaxHeight().background(Color.White)) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier.size(50.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp)),
@@ -477,7 +434,6 @@ fun ExamScreen(
                             }
                             Divider(color = Color.LightGray.copy(alpha = 0.5f))
 
-                            // 2. Legend Section
                             Column(modifier = Modifier.padding(16.dp)) {
                                 if (!isReviewMode) {
                                     val flatStates = questionStates.flatten()
@@ -516,7 +472,6 @@ fun ExamScreen(
                                 }
                             }
 
-                            // 3. Grid Section (Palette shows current SECTION questions only)
                             Column(modifier = Modifier.weight(1f).background(Color(0xFFF4F7FB)).padding(16.dp)) {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -578,7 +533,6 @@ fun ExamScreen(
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            // The text displays the absolute global index
                                             Text("${currentSection.globalStartIndex + idx + 1}", color = textColor, fontWeight = FontWeight.Bold)
                                             if (!isReviewMode && state.status == QuestionStatus.ANSWERED_AND_MARKED) {
                                                 Box(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(6.dp).background(Color.Green, CircleShape))
@@ -588,7 +542,6 @@ fun ExamScreen(
                                 }
                             }
 
-                            // 4. Bottom Drawer Button
                             if (!isReviewMode) {
                                 Box(modifier = Modifier.padding(16.dp)) {
                                     Button(
@@ -611,7 +564,6 @@ fun ExamScreen(
                 Scaffold(
                     topBar = {
                         Column {
-                            // Main Top Bar
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -647,7 +599,6 @@ fun ExamScreen(
                                     }
                                 }
                             }
-                            // Section Tabs
                             LazyRow(
                                 modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).padding(top = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -746,31 +697,17 @@ fun ExamScreen(
                     }
                 ) { padding ->
                     Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-                        // Info Bar
                         Row(
                             modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).border(1.dp, Color.LightGray).padding(8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Question Type: Multiple Choice", fontSize = 12.sp, color = Color.DarkGray, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                val posText = if (positiveMark % 1f == 0f) {
-                                    positiveMark.toInt().toString()
-                                } else {
-                                    positiveMark.toString()
-                                }
-                                
-                                val negText = if (negativeMark % 1f == 0f) {
-                                    negativeMark.toInt().toString()
-                                } else {
-                                    negativeMark.toString()
-                                }
-                                
-                                Text("Marks: +$posText", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
-                                Text("Negative: -$negText", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
+                                Text("Marks: +1", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
+                                Text("Negative: 0", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
                             }
                         }
 
-                        // Question Area
                         LazyColumn(modifier = Modifier.weight(1f).padding(16.dp)) {
                             item {
                                 Row(verticalAlignment = Alignment.Top) {
@@ -797,11 +734,7 @@ fun ExamScreen(
                                     if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray
                                 } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray
 
-                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) {
-                                    "#FFFFFF"
-                                } else {
-                                    "#333333"
-                                }
+                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) "#FFFFFF" else "#333333"
 
                                 Row(
                                     modifier = Modifier
@@ -891,7 +824,6 @@ fun ExamScreen(
     }
 }
 
-// Reusable Legend Item
 @Composable
 fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.ui.graphics.Shape, hasDot: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.width(130.dp)) {
@@ -944,13 +876,10 @@ fun MathText(
                     background-color: transparent;
                     word-wrap: break-word;
                     
-                    /* SECURITY: Disable text selection and mobile callouts */
                     -webkit-touch-callout: none; 
                     -webkit-user-select: none;   
                     user-select: none;           
                 }
-                
-                /* pointer-events: none prevents long-pressing to save images */
                 img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 4px; pointer-events: none; }
             </style>
         </head>
@@ -970,7 +899,6 @@ fun MathText(
                 settings.javaScriptEnabled = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 
-                // SECURITY: Disable long-press at the Android level (stops context menus)
                 isLongClickable = false
                 setOnLongClickListener { true }
                 
