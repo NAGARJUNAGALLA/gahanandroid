@@ -66,7 +66,9 @@ fun ExamScreen(
     courseId: String,
     testName: String,
     isReviewMode: Boolean = false, 
-    onFinalSubmit: (Int, Int) -> Unit,
+    positiveMark: Float = 1f, 
+    negativeMark: Float = 0f, 
+    onFinalSubmit: (Float, Int) -> Unit, 
     onExitReview: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -226,7 +228,7 @@ fun ExamScreen(
     }
 
     // ----------------------------------------------------------------------------------
-    // STEP 1: INSTRUCTIONS SCREEN (Exact HTML Match)
+    // STEP 1: INSTRUCTIONS SCREEN 
     // ----------------------------------------------------------------------------------
     if (examStep == ExamStep.INSTRUCTIONS) {
         Scaffold(
@@ -297,8 +299,20 @@ fun ExamScreen(
                                 Text(sec.name, modifier = Modifier.weight(1.5f), fontSize = 12.sp)
                                 Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
                                 Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
-                                Text("1", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
-                                Text("0", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                
+                                val posDisplay = if (positiveMark % 1f == 0f) {
+                                    positiveMark.toInt().toString()
+                                } else {
+                                    positiveMark.toString()
+                                }
+                                val negDisplay = if (negativeMark % 1f == 0f) {
+                                    negativeMark.toInt().toString()
+                                } else {
+                                    negativeMark.toString()
+                                }
+                                
+                                Text(posDisplay, modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text(negDisplay, modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
                             }
                             Divider(color = Color.LightGray)
                         }
@@ -396,14 +410,23 @@ fun ExamScreen(
                         Button(
                             onClick = {
                                 saveProgressLocally()
-                                var score = 0
+                                
+                                var finalScore = 0f
                                 sections.forEachIndexed { sIdx, section ->
                                     section.questions.forEachIndexed { qIdx, q ->
-                                        if (questionStates[sIdx][qIdx].selectedOption == q.correct) score++
+                                        val userSelection = questionStates[sIdx][qIdx].selectedOption
+                                        if (userSelection != null) {
+                                            if (userSelection == q.correct) {
+                                                finalScore += positiveMark
+                                            } else {
+                                                finalScore -= negativeMark
+                                            }
+                                        }
                                     }
                                 }
+                                
                                 localStorage.markTestAsAttempted(courseId, testName)
-                                onFinalSubmit(score, totalQuestions)
+                                onFinalSubmit(finalScore, totalQuestions)
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
@@ -555,7 +578,7 @@ fun ExamScreen(
                                                 },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            // The text displays the absolute global index to match HTML behavior
+                                            // The text displays the absolute global index
                                             Text("${currentSection.globalStartIndex + idx + 1}", color = textColor, fontWeight = FontWeight.Bold)
                                             if (!isReviewMode && state.status == QuestionStatus.ANSWERED_AND_MARKED) {
                                                 Box(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(6.dp).background(Color.Green, CircleShape))
@@ -730,8 +753,20 @@ fun ExamScreen(
                         ) {
                             Text("Question Type: Multiple Choice", fontSize = 12.sp, color = Color.DarkGray, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Marks: +1", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
-                                Text("Negative: 0", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
+                                val posText = if (positiveMark % 1f == 0f) {
+                                    positiveMark.toInt().toString()
+                                } else {
+                                    positiveMark.toString()
+                                }
+                                
+                                val negText = if (negativeMark % 1f == 0f) {
+                                    negativeMark.toInt().toString()
+                                } else {
+                                    negativeMark.toString()
+                                }
+                                
+                                Text("Marks: +$posText", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
+                                Text("Negative: -$negText", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -762,8 +797,11 @@ fun ExamScreen(
                                     if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray
                                 } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray
 
-                                
-                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) "#1976D2"" else "#333333"
+                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) {
+                                    "#FFFFFF"
+                                } else {
+                                    "#333333"
+                                }
 
                                 Row(
                                     modifier = Modifier
@@ -779,7 +817,6 @@ fun ExamScreen(
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                            
                                     Box(
                                         modifier = Modifier
                                             .size(28.dp)
@@ -801,7 +838,6 @@ fun ExamScreen(
                                     
                                     Spacer(modifier = Modifier.width(12.dp))
                                     
-                                
                                     Box(modifier = Modifier.weight(1f)) {
                                         MathText(
                                             text = optionText,
@@ -810,7 +846,6 @@ fun ExamScreen(
                                         )
                                     }
                                     
-                                
                                     if (isReviewMode) {
                                         Spacer(modifier = Modifier.width(8.dp))
                                         if (isCorrectAnswer) {
@@ -856,6 +891,7 @@ fun ExamScreen(
     }
 }
 
+// Reusable Legend Item
 @Composable
 fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.ui.graphics.Shape, hasDot: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.width(130.dp)) {
@@ -908,7 +944,7 @@ fun MathText(
                     background-color: transparent;
                     word-wrap: break-word;
                     
-                    /* NEW: Disable text selection and mobile callouts */
+                    /* SECURITY: Disable text selection and mobile callouts */
                     -webkit-touch-callout: none; 
                     -webkit-user-select: none;   
                     user-select: none;           
@@ -934,7 +970,7 @@ fun MathText(
                 settings.javaScriptEnabled = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 
-            
+                // SECURITY: Disable long-press at the Android level (stops context menus)
                 isLongClickable = false
                 setOnLongClickListener { true }
                 
