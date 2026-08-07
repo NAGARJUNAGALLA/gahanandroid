@@ -171,16 +171,12 @@ fun MockTestsApp() {
         composable(
     route = "results_screen/{score}/{totalQuestions}",
     arguments = listOf(
-        // 1. Ensure this is FloatType
-        navArgument("score") { type = NavType.FloatType }, 
+        navArgument("score") { type = NavType.IntType }, // <-- BACK TO IntType
         navArgument("totalQuestions") { type = NavType.IntType }
     )
 ) { backStackEntry ->
     
-    // 2. THIS IS THE LINE CAUSING THE ERROR! 
-    // Change getInt to getFloat, and 0 to 0f
-    val finalScore = backStackEntry.arguments?.getFloat("score") ?: 0f 
-    
+    val finalScore = backStackEntry.arguments?.getInt("score") ?: 0 // <-- BACK TO getInt
     val total = backStackEntry.arguments?.getInt("totalQuestions") ?: 0
     
     ResultScreen(
