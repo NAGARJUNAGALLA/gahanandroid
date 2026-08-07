@@ -1,9 +1,11 @@
 package com.jcv.mocktests.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
@@ -27,16 +29,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.jcv.mocktests.R
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
@@ -91,6 +97,25 @@ fun MainDashboardScreen(
     val auth = FirebaseAuth.getInstance()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // -------------------------------------------------------------------------
+    // NEW: UNIFY SYSTEM STATUS BAR AND NAVIGATION BAR COLORS
+    // -------------------------------------------------------------------------
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            // Set both the top status bar and bottom system buttons to ThemeBlue
+            window.statusBarColor = android.graphics.Color.parseColor("#1976D2")
+            window.navigationBarColor = android.graphics.Color.parseColor("#1976D2")
+            
+            // Ensures the text/icons (battery, time) on the system bars remain white
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = false
+            insetsController.isAppearanceLightNavigationBars = false
+        }
+    }
+    // -------------------------------------------------------------------------
 
     var allCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
     var proCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
@@ -353,9 +378,8 @@ fun MainDashboardScreen(
             },
             bottomBar = {
                 NavigationBar(
-                    containerColor = Color.White,
-                    contentColor = Color.Gray,
-                    tonalElevation = 8.dp
+                    containerColor = ThemeBlue, // UPDATED: Blue background to match system bar
+                    contentColor = Color.White  // UPDATED: White elements to contrast
                 ) {
                     NavigationBarItem(
                         icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
@@ -635,13 +659,16 @@ fun LoadingLogo() {
     }
 }
 
+// -------------------------------------------------------------------------
+// UPDATED: Inverted colors for blue background
+// -------------------------------------------------------------------------
 @Composable
 fun navColors() = NavigationBarItemDefaults.colors(
-    selectedIconColor = ThemeBlue,
-    selectedTextColor = ThemeBlue,
-    indicatorColor = ThemeBlue.copy(alpha = 0.1f),
-    unselectedIconColor = Color.Gray,
-    unselectedTextColor = Color.Gray
+    selectedIconColor = ThemeBlue, 
+    selectedTextColor = Color.White, 
+    indicatorColor = Color.White, 
+    unselectedIconColor = Color.White.copy(alpha = 0.6f), 
+    unselectedTextColor = Color.White.copy(alpha = 0.6f)
 )
 
 @Composable
@@ -694,8 +721,8 @@ fun DashboardHomeContent(
             UserProfileHeader(auth)
             
             Text(
-                text = "🔥 Welcome to JCV MOCK Tests 🔥 Thanks for Choosing JCV MOCK TESTS",
-                color = RedBadgeColor,
+                text = "Welcome to JCV MOCK Tests and Thanks for Choosing JCV MOCK TESTS",
+                color = ThemeBlue,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -785,6 +812,9 @@ fun DashboardHomeContent(
     }
 }
 
+// -------------------------------------------------------------------------
+// UPDATED: Now shows your App Logo instead of the grey Person icon
+// -------------------------------------------------------------------------
 @Composable
 fun UserProfileHeader(auth: FirebaseAuth) {
     val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
@@ -800,15 +830,14 @@ fun UserProfileHeader(auth: FirebaseAuth) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
+            Image(
+                painter = painterResource(id = R.mipmap.ic_launcher), // Or R.drawable.logo
+                contentDescription = "App Logo",
                 modifier = Modifier
                     .size(80.dp)
-                    .background(Color.LightGray, RoundedCornerShape(4.dp))
-                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Person, contentDescription = "Profile", modifier = Modifier.size(50.dp), tint = Color.White)
-            }
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+            )
             
             Spacer(modifier = Modifier.width(16.dp))
             
@@ -888,7 +917,6 @@ fun CourseGridScreen(title: String, courses: List<CourseModel>, onCourseClick: (
 @Composable
 fun CourseCardView(course: CourseModel, backgroundColor: Color, onClick: () -> Unit) {
     val originalPrice = course.fee * 1.5
-    
     val context = LocalContext.current
     
     Card(
