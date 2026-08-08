@@ -87,6 +87,11 @@ fun MainDashboardScreen(
             }
         )
     }
+    LaunchedEffect(selectedTab) {
+        com.jcv.mocktests.utils.AnalyticsHelper.logEvent(com.google.firebase.analytics.FirebaseAnalytics.Event.SCREEN_VIEW) {
+            putString(com.google.firebase.analytics.FirebaseAnalytics.Param.SCREEN_NAME, selectedTab.name)
+        }
+    }
 
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
@@ -213,6 +218,10 @@ fun MainDashboardScreen(
         } else if (pendingSheetIds.contains(course.sheetId)) {
             Toast.makeText(context, "Your registration is currently under review by the admin. Please check back later.", Toast.LENGTH_LONG).show()
         } else {
+            com.jcv.mocktests.utils.AnalyticsHelper.logEvent("view_payment_dialog") {
+                putString("course_title", course.title)
+                putDouble("course_fee", course.fee)
+            }
             showPaymentDialog = course
         }
     }
@@ -229,6 +238,10 @@ fun MainDashboardScreen(
             onDismiss = { showPaymentDialog = null },
             onSubmit = { app, utr ->
                 isSubmittingPayment = true
+                com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_utr") {
+                    putString("course_title", course.title)
+                    putString("payment_app", app)
+                }
                 val docId = "${auth.currentUser?.uid}_${course.title}"
                 
                 val paymentData = hashMapOf(
