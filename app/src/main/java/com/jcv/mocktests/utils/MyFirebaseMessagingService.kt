@@ -11,7 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.jcv.mocktests.MainActivity
-import com.jcv.mocktests.R // Ensure this matches your package
+import com.jcv.mocktests.R 
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -43,7 +43,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             // Replace ic_launcher with a custom notification icon if you have one
-            .setSmallIcon(R.mipmap.ic_launcher) 
+            .setSmallIcon(R.drawable.logo) 
             .setContentTitle(title)
             .setContentText(messageBody)
             .setAutoCancel(true)
