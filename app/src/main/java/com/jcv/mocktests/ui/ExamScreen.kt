@@ -249,6 +249,9 @@ fun ExamScreen(
                                 examStep = ExamStep.EXAM 
                                 saveProgressLocally()
                             },
+                            com.jcv.mocktests.utils.AnalyticsHelper.logEvent("start_exam") {
+                                    putString("test_name", testName)
+                            }
                             enabled = hasAgreedToRules,
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
@@ -391,7 +394,11 @@ fun ExamScreen(
                                         if (questionStates[sIdx][qIdx].selectedOption == q.correct) score++
                                     }
                                 }
-                                
+                                com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
+                                    putString("test_name", testName)
+                                    putInt("score", score)
+                                    putInt("total_questions", totalQuestions)
+                                }
                                 localStorage.markTestAsAttempted(courseId, testName)
                                 onFinalSubmit(score, totalQuestions)
                             },
