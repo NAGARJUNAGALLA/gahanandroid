@@ -246,12 +246,17 @@ fun ExamScreen(
                         }
                         Button(
                             onClick = { 
+                        
                                 examStep = ExamStep.EXAM 
+                                
+                            
                                 saveProgressLocally()
-                            },
-                            com.jcv.mocktests.utils.AnalyticsHelper.logEvent("start_exam") {
+                                
+                            
+                                com.jcv.mocktests.utils.AnalyticsHelper.logEvent("start_exam") {
                                     putString("test_name", testName)
-                            },
+                                }
+                            }, 
                             enabled = hasAgreedToRules,
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
