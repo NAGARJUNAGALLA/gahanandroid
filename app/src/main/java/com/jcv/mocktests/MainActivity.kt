@@ -1,13 +1,18 @@
 package com.jcv.mocktests
 
+import android.Manifest
 import android.app.Activity
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.navigation.NavType
@@ -22,7 +27,7 @@ import java.net.URLEncoder
 
 class MainActivity : ComponentActivity() {
 
-    // 1. ADD THIS: The permission request launcher
+    // 1. The permission request launcher for Android 13+ Notifications
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -34,18 +39,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 2. ADD THIS: Ask for notification permission on Android 13+
+        // 2. Ask for notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
+        // 3. Initialize Analytics
         com.jcv.mocktests.utils.AnalyticsHelper.init(this)
         
+        // 4. Security: Prevent Screenshots and Screen Recording (FIXED TYPO HERE)
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
-            WindowMana
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
+
         setContent {
             // -----------------------------------------------------------------
             // GLOBAL SYSTEM BAR THEMING
@@ -65,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     insetsController.isAppearanceLightNavigationBars = false
                 }
             }
+            
             MockTestsApp()
         }
     }
