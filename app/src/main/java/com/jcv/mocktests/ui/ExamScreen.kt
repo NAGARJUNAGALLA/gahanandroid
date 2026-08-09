@@ -458,7 +458,7 @@ fun ExamScreen(
                                 totalIncorrect = wrongAnswers
                                 totalSkipped = skippedAnswers
                                 
-                                localStorage.saveTestScore(courseId, testName, finalResultScore.toInt(), finalMaxScore.toInt())
+                                localStorage.saveTestScore(courseId, testName, finalResultScore.toFloat(), finalMaxScore.toFloat())
                                 
                                 com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
                                     putString("test_name", testName)
