@@ -17,4 +17,21 @@ class LocalStorage(context: Context) {
         val key = "${courseId}_${testName}_completed"
         return prefs.getBoolean(key, false)
     }
+    // ADD THIS to save the score after an exam
+    fun saveTestScore(courseId: String, testName: String, score: Int, maxScore: Int) {
+        val prefs = context.getSharedPreferences("JcvAppPrefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt("score_${courseId}_${testName}", score)
+            .putInt("max_${courseId}_${testName}", maxScore)
+            .putBoolean("attempted_${courseId}_${testName}", true)
+            .apply()
+    }
+
+    // ADD THIS to retrieve the score for the UI
+    fun getTestScore(courseId: String, testName: String): Pair<Int, Int>? {
+        val prefs = context.getSharedPreferences("JcvAppPrefs", Context.MODE_PRIVATE)
+        val score = prefs.getInt("score_${courseId}_${testName}", -1)
+        val max = prefs.getInt("max_${courseId}_${testName}", -1)
+        return if (score != -1) Pair(score, max) else null
+    }
 }
