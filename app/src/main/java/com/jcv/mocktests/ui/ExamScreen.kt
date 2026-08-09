@@ -66,7 +66,7 @@ fun ExamScreen(
     courseId: String,
     testName: String,
     isReviewMode: Boolean = false, 
-    onFinalSubmit: (Int, Int) -> Unit, // BACK TO INT
+    onFinalSubmit: (Int, Int) -> Unit,
     onExitReview: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -246,7 +246,6 @@ fun ExamScreen(
                             )
                             Text("Choose Language: English | I have read and understood the instructions.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
-                       // ADD THIS: Marking Scheme Dropdown
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
                             OutlinedButton(
                                 onClick = { isDropdownExpanded = true },
@@ -275,13 +274,8 @@ fun ExamScreen(
                         } 
                         Button(
                             onClick = { 
-                        
                                 examStep = ExamStep.EXAM 
-                                
-                            
                                 saveProgressLocally()
-                                
-                            
                                 com.jcv.mocktests.utils.AnalyticsHelper.logEvent("start_exam") {
                                     putString("test_name", testName)
                                 }
@@ -421,7 +415,6 @@ fun ExamScreen(
                             onClick = {
                                 saveProgressLocally()
                                 
-                                // 1. Count correct answers
                                 var correctAnswers = 0
                                 sections.forEachIndexed { sIdx, section ->
                                     section.questions.forEachIndexed { qIdx, q ->
@@ -429,20 +422,16 @@ fun ExamScreen(
                                     }
                                 }
                                 
-                                // 2. Multiply by selected positive mark
                                 val finalScore = correctAnswers * positiveMark
                                 val maxScore = totalQuestions * positiveMark
                                 
-                                // 3. Save to LocalStorage
                                 localStorage.saveTestScore(courseId, testName, finalScore, maxScore)
                                 
-                                // 4. Log Analytics
                                 com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
                                     putString("test_name", testName)
                                     putInt("score", finalScore)
                                 }
                                 
-                                // 5. Navigate to results
                                 onFinalSubmit(finalScore, maxScore)
                             },
                             modifier = Modifier.weight(1f),
@@ -784,7 +773,15 @@ fun ExamScreen(
                                     if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray
                                 } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray
 
-                                val hexTextColor = if (isReviewMode && (isCorrectAnswer || isSelected)) "#FFFFFF" else "#333333"
+                                // FIX 1: Updated the Text Color to be highly readable!
+                                val hexTextColor = if (isReviewMode) {
+                                    if (isCorrectAnswer) "#166534" // Dark Green
+                                    else if (isSelected) "#991B1B" // Dark Red
+                                    else "#333333"
+                                } else {
+                                    if (isSelected) "#1E40AF" // Dark Blue
+                                    else "#333333"
+                                }
 
                                 Row(
                                     modifier = Modifier
@@ -827,6 +824,8 @@ fun ExamScreen(
                                             fontSizePx = 16,
                                             textColorHex = hexTextColor
                                         )
+                                        // FIX 2: Transparent overlay Box prevents WebView from stealing the click!
+                                        Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
                                     }
                                     
                                     if (isReviewMode) {
