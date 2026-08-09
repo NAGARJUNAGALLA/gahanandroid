@@ -34,14 +34,14 @@ fun AuthScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // UI State for the custom biometric dialog
-    var showAuthDialog by remember { mutableStateOf(true) } // Set to true to show instantly on launch
+    // UI State for the custom biometric dialog - UPDATED TO FALSE INITIALLY
+    var showAuthDialog by remember { mutableStateOf(false) } 
     var biometricError by remember { mutableStateOf<String?>(null) }
 
     val auth = FirebaseAuth.getInstance()
     val context = LocalContext.current
 
-    // THE CUSTOM BIOMETRIC DIALOG
+    // THE CUSTOM BIOMETRIC DIALOG (Now acts as 2FA after password success)
     if (showAuthDialog) {
         AlertDialog(
             onDismissRequest = { showAuthDialog = false },
@@ -51,7 +51,7 @@ fun AuthScreen(
                     Icon(
                         imageVector = Icons.Default.Warning,
                         contentDescription = "Warning",
-                        tint = Color(0xFFFFB300), // Yellow Warning Color
+                        tint = Color(0xFFFFB300), 
                         modifier = Modifier.size(32.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -66,7 +66,6 @@ fun AuthScreen(
                     onClick = {
                         showAuthDialog = false
                         
-                        // TRIGGER THE FINGERPRINT SCANNER
                         val activity = context as? androidx.fragment.app.FragmentActivity
                         if (activity != null) {
                             val executor = androidx.core.content.ContextCompat.getMainExecutor(activity)
@@ -76,20 +75,23 @@ fun AuthScreen(
                                 object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
                                     override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
                                         super.onAuthenticationSucceeded(result)
-                                        // SUCCESS! Navigate to home securely
+                                        // BIOMETRIC SUCCESS! Navigate to home
                                         onNavigateToHome()
                                     }
 
                                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                                         super.onAuthenticationError(errorCode, errString)
                                         biometricError = errString.toString()
+                                        // If biometric fails or is cancelled, you can decide whether to block them 
+                                        // or let them in since they already provided a valid password. 
+                                        // Currently, it just shows an error toast.
                                     }
                                 }
                             )
 
                             val promptInfo = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
-                                .setTitle("Sign in to Mock Tests")
-                                .setSubtitle("Use your fingerprint or screen lock")
+                                .setTitle("Verify your identity")
+                                .setSubtitle("Confirm it's you to continue")
                                 .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
                                 .build()
 
@@ -98,7 +100,7 @@ fun AuthScreen(
                             biometricError = "Biometric authentication is not supported on this device."
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8BC34A)), // Green Button
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8BC34A)), 
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Use Screen Lock", color = Color.White, fontWeight = FontWeight.Bold)
@@ -106,7 +108,12 @@ fun AuthScreen(
             },
             dismissButton = {
                 OutlinedButton(
-                    onClick = { showAuthDialog = false }, // Dismiss and let them type password
+                    onClick = { 
+                        showAuthDialog = false
+                        // Since they already validated their password successfully, 
+                        // clicking this allows them to bypass the fingerprint step.
+                        onNavigateToHome() 
+                    },
                     shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, Color.Black)
                 ) {
@@ -116,7 +123,6 @@ fun AuthScreen(
         )
     }
 
-    // Show a quick Toast error if they cancel or fail the fingerprint scan
     biometricError?.let {
         LaunchedEffect(it) {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
@@ -130,7 +136,6 @@ fun AuthScreen(
         verticalArrangement = Arrangement.Center
     ) {
         
-        // APP LOGO
         Image(
             painter = painterResource(id = R.drawable.logo),
             contentDescription = "App Logo",
@@ -188,11 +193,13 @@ fun AuthScreen(
                     "$trimmedIdentifier@jcv.com"
                 }
 
+                // VALIDATE CREDENTIALS FIRST
                 auth.signInWithEmailAndPassword(finalAuthEmail, password)
                     .addOnCompleteListener { task ->
                         isLoading = false
                         if (task.isSuccessful) {
-                            onNavigateToHome()
+                            // CREDENTIALS ARE VALID -> TRIGGER THE AUTH DIALOG
+                            showAuthDialog = true
                         } else {
                             errorMessage = task.exception?.message ?: "Login Failed"
                         }
