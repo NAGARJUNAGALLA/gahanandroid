@@ -1,25 +1,29 @@
 package com.jcv.mocktests.utils
 
 import android.content.Context
+import android.content.SharedPreferences
 
-class LocalStorage(context: Context) {
-    // This creates a private preferences file named "JcvCbtPrefs"
-    private val prefs = context.getSharedPreferences("JcvCbtPrefs", Context.MODE_PRIVATE)
+class LocalStorage(private val context: Context) {
+    
+    // We create ONE consistent preferences file for the whole app
+    private val prefs: SharedPreferences = context.getSharedPreferences("JcvAppPrefs", Context.MODE_PRIVATE)
 
     // Save that a specific test was completed
     fun markTestAsAttempted(courseId: String, testName: String) {
-        val key = "${courseId}_${testName}_completed"
+        val key = "attempted_${courseId}_${testName}"
         prefs.edit().putBoolean(key, true).apply()
     }
 
     // Check if a specific test was already completed
     fun isTestAttempted(courseId: String, testName: String): Boolean {
-        val key = "${courseId}_${testName}_completed"
-        return prefs.getBoolean(key, false)
+        // Checks both the old and new key styles so students don't lose past progress
+        val oldKey = "${courseId}_${testName}_completed"
+        val newKey = "attempted_${courseId}_${testName}"
+        return prefs.getBoolean(oldKey, false) || prefs.getBoolean(newKey, false)
     }
-    // ADD THIS to save the score after an exam
+
+    // Save the score after an exam
     fun saveTestScore(courseId: String, testName: String, score: Int, maxScore: Int) {
-        val prefs = context.getSharedPreferences("JcvAppPrefs", Context.MODE_PRIVATE)
         prefs.edit()
             .putInt("score_${courseId}_${testName}", score)
             .putInt("max_${courseId}_${testName}", maxScore)
@@ -27,9 +31,8 @@ class LocalStorage(context: Context) {
             .apply()
     }
 
-    // ADD THIS to retrieve the score for the UI
+    // Retrieve the score for the UI
     fun getTestScore(courseId: String, testName: String): Pair<Int, Int>? {
-        val prefs = context.getSharedPreferences("JcvAppPrefs", Context.MODE_PRIVATE)
         val score = prefs.getInt("score_${courseId}_${testName}", -1)
         val max = prefs.getInt("max_${courseId}_${testName}", -1)
         return if (score != -1) Pair(score, max) else null
