@@ -8,7 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,7 +23,6 @@ import com.jcv.mocktests.utils.LocalStorage
 
 // Colors
 val DarkHeaderColor = Color(0xFF181E2F)
-val ViewSeriesBlue = Color(0xFF1E90FF) // Added to ensure it compiles
 
 // NEW: Data class to hold the parsed test details for the UI
 data class TestSummary(
@@ -199,14 +198,14 @@ fun CourseDetailScreen(
                                                 Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
                                             }
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.Schedule, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                                Icon(Icons.Default.DateRange, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
                                             }
                                         }
 
                                         Spacer(modifier = Modifier.height(16.dp))
-                                        HorizontalDivider(color = Color(0xFFF3F4F6))
+                                        Divider(color = Color(0xFFF3F4F6))
                                         Spacer(modifier = Modifier.height(16.dp))
                                         
                                         // ROW 3: Action Buttons & Score
