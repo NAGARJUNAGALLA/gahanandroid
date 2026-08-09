@@ -24,8 +24,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.jcv.mocktests.ui.*
 import java.net.URLDecoder
 import java.net.URLEncoder
+import androidx.fragment.app.FragmentActivity
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     // 1. The permission request launcher for Android 13+ Notifications
     private val requestPermissionLauncher = registerForActivityResult(
