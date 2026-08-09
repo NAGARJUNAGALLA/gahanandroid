@@ -45,14 +45,13 @@ import com.jcv.mocktests.utils.LocalStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// EXACT WEB APP COLORS
 val JcvGradient = Brush.horizontalGradient(listOf(Color(0xFF104E8B), Color(0xFF1E90FF)))
 val StatusAnsweredColor = Color(0xFF27AE60)
 val StatusNotAnsweredColor = Color(0xFFE74C3C)
 val StatusMarkedColor = Color(0xFF9B59B6)
 val StatusNotVisitedColor = Color(0xFFFFFFFF)
 
-enum class ExamStep { INSTRUCTIONS, EXAM, SUBMIT_CONFIRM }
+enum class ExamStep { INSTRUCTIONS, EXAM, SUBMIT_CONFIRM, RESULT }
 
 data class ExamSection(
     val name: String,
@@ -66,8 +65,8 @@ fun ExamScreen(
     courseId: String,
     testName: String,
     isReviewMode: Boolean = false, 
-    onFinalSubmit: (Int, Int) -> Unit,
-    onExitReview: () -> Unit = {}
+    onNavigateBack: () -> Unit,
+    onReviewTest: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val localStorage = remember { LocalStorage(context) }
@@ -85,8 +84,19 @@ fun ExamScreen(
     var totalQuestions by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var hasAgreedToRules by remember { mutableStateOf(false) }
-    var positiveMark by remember { mutableIntStateOf(1) }
-    var isDropdownExpanded by remember { mutableStateOf(false) }
+    
+    // Marking Scheme States
+    var positiveMark by remember { mutableFloatStateOf(1f) }
+    var negativeMark by remember { mutableFloatStateOf(0f) }
+    var isPosDropdownExpanded by remember { mutableStateOf(false) }
+    var isNegDropdownExpanded by remember { mutableStateOf(false) }
+
+    // Result States
+    var finalResultScore by remember { mutableFloatStateOf(0f) }
+    var finalMaxScore by remember { mutableFloatStateOf(0f) }
+    var totalCorrect by remember { mutableIntStateOf(0) }
+    var totalIncorrect by remember { mutableIntStateOf(0) }
+    var totalSkipped by remember { mutableIntStateOf(0) }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -109,7 +119,6 @@ fun ExamScreen(
             .apply()
     }
 
-    // Fetch Questions & Restore State
     LaunchedEffect(courseId, testName) {
         val db = FirebaseFirestore.getInstance()
         db.collection("pro_course_questions").document(courseId).get()
@@ -206,7 +215,7 @@ fun ExamScreen(
                 saveProgressLocally()
             }
         } else {
-            if (!isReviewMode) examStep = ExamStep.SUBMIT_CONFIRM else onExitReview()
+            if (!isReviewMode) examStep = ExamStep.SUBMIT_CONFIRM else onNavigateBack()
         }
     }
 
@@ -230,7 +239,7 @@ fun ExamScreen(
                 TopAppBar(
                     title = { Text(testName, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
-                        IconButton(onClick = onExitReview) { Icon(Icons.Default.ArrowBack, tint = Color.White, contentDescription = "Back") }
+                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, tint = Color.White, contentDescription = "Back") }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF104E8B))
                 )
@@ -246,32 +255,51 @@ fun ExamScreen(
                             )
                             Text("Choose Language: English | I have read and understood the instructions.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                        
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
                             OutlinedButton(
-                                onClick = { isDropdownExpanded = true },
+                                onClick = { isPosDropdownExpanded = true },
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF104E8B))
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF27AE60)) 
                             ) {
-                                Text("Marking Scheme: +$positiveMark Mark(s) per correct answer")
+                                Text("Correct Answer: +$positiveMark Mark(s)")
                             }
                             DropdownMenu(
-                                expanded = isDropdownExpanded,
-                                onDismissRequest = { isDropdownExpanded = false },
+                                expanded = isPosDropdownExpanded,
+                                onDismissRequest = { isPosDropdownExpanded = false },
                                 modifier = Modifier.fillMaxWidth(0.9f).background(Color.White)
                             ) {
-                                listOf(1, 2, 3, 4).forEach { mark ->
+                                listOf(1f, 2f, 3f, 4f).forEach { mark ->
                                     DropdownMenuItem(
-                                        text = { 
-                                            Text("+$mark Marks ${if(mark==4) "(IIT JEE Style)" else if(mark==2) "(SSC CGL Style)" else ""}") 
-                                        },
-                                        onClick = {
-                                            positiveMark = mark
-                                            isDropdownExpanded = false
-                                        }
+                                        text = { Text("+$mark Marks ${if(mark==4f) "(IIT JEE)" else if(mark==2f) "(SSC CGL)" else ""}") },
+                                        onClick = { positiveMark = mark; isPosDropdownExpanded = false }
                                     )
                                 }
                             }
-                        } 
+                        }
+
+                        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                            OutlinedButton(
+                                onClick = { isNegDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE74C3C))
+                            ) {
+                                Text("Wrong Answer: -$negativeMark Mark(s)")
+                            }
+                            DropdownMenu(
+                                expanded = isNegDropdownExpanded,
+                                onDismissRequest = { isNegDropdownExpanded = false },
+                                modifier = Modifier.fillMaxWidth(0.9f).background(Color.White)
+                            ) {
+                                listOf(0f, 0.25f, 0.33f, 0.5f, 1f).forEach { mark ->
+                                    DropdownMenuItem(
+                                        text = { Text("-$mark Marks ${if(mark==0f) "(No Negative Marking)" else if(mark==0.5f) "(SSC CGL)" else if(mark==1f) "(IIT JEE)" else ""}") },
+                                        onClick = { negativeMark = mark; isNegDropdownExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+
                         Button(
                             onClick = { 
                                 examStep = ExamStep.EXAM 
@@ -298,10 +326,9 @@ fun ExamScreen(
                     .padding(16.dp)
             ) {
                 Text("Please read the following instructions carefully", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp).fillMaxWidth(), textAlign = TextAlign.Center)
-                
                 Text("Total Number of Questions: $totalQuestions", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Text("Total Time Available: ${totalQuestions} Mins", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(bottom = 16.dp))
-
+                
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                     border = BorderStroke(1.dp, Color.LightGray),
@@ -354,15 +381,9 @@ fun ExamScreen(
                         Text(" You have answered the question, but marked it for review.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
-
-                Text("General Instructions:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
-                Text("1. Total of ${totalQuestions} Mins duration will be given to attempt all the questions.\n2. The clock has been set at the server and the countdown timer will display the time remaining.\n3. The question palette helps you navigate through the questions.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
-
+                
                 Text("Navigating to a Question:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
-                Text("4. Click on the question number on the palette to go to that question directly.\n5. Click on Save and Next to save answer and move forward.\n6. Click on Mark for Review and Next to save answer, mark it, and move forward.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
-
-                Text("Navigating through Sections:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
-                Text("7. Sections are displayed on the top bar. Questions in a section can be viewed by clicking on the section name.\n8. After clicking Save & Next on the last question of a section, you will automatically be taken to the first question of the next section.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 32.dp))
+                Text("1. Click on the question number on the palette to go to that question directly.\n2. Click on Save and Next to save answer and move forward.\n3. Click on Mark for Review and Next to save answer, mark it, and move forward.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
             }
         }
         return
@@ -373,7 +394,6 @@ fun ExamScreen(
         val answered = flatStates.count { it.status == QuestionStatus.ANSWERED || it.status == QuestionStatus.ANSWERED_AND_MARKED }
         val marked = flatStates.count { it.status == QuestionStatus.MARKED_FOR_REVIEW }
         val notAnswered = flatStates.count { it.status == QuestionStatus.NOT_ANSWERED }
-        val notVisited = flatStates.count { it.status == QuestionStatus.NOT_VISITED }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
             Card(
@@ -384,7 +404,7 @@ fun ExamScreen(
                 Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Submit Examination", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color(0xFF104E8B))
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Are you sure you want to submit the exam? You will not be able to return to the questions.", textAlign = TextAlign.Center, color = Color.DarkGray)
+                    Text("Are you sure you want to submit the exam?", textAlign = TextAlign.Center, color = Color.DarkGray)
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
@@ -396,10 +416,6 @@ fun ExamScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(notAnswered.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusNotAnsweredColor)
                             Text("Skipped", fontSize = 10.sp, color = Color.Gray)
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(marked.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusMarkedColor)
-                            Text("Marked", fontSize = 10.sp, color = Color.Gray)
                         }
                     }
 
@@ -416,29 +432,133 @@ fun ExamScreen(
                                 saveProgressLocally()
                                 
                                 var correctAnswers = 0
+                                var wrongAnswers = 0
+                                var skippedAnswers = 0
+                                
                                 sections.forEachIndexed { sIdx, section ->
                                     section.questions.forEachIndexed { qIdx, q ->
-                                        if (questionStates[sIdx][qIdx].selectedOption == q.correct) correctAnswers++
+                                        val selected = questionStates[sIdx][qIdx].selectedOption
+                                        if (selected == null || selected == -1) {
+                                            skippedAnswers++
+                                        } else if (selected == q.correct) {
+                                            correctAnswers++
+                                        } else {
+                                            wrongAnswers++
+                                        }
                                     }
                                 }
                                 
-                                val finalScore = correctAnswers * positiveMark
-                                val maxScore = totalQuestions * positiveMark
+                                val posScore = correctAnswers * positiveMark
+                                val negScore = wrongAnswers * negativeMark
                                 
-                                localStorage.saveTestScore(courseId, testName, finalScore, maxScore)
+                                finalResultScore = posScore - negScore
+                                finalMaxScore = totalQuestions * positiveMark
+                                
+                                totalCorrect = correctAnswers
+                                totalIncorrect = wrongAnswers
+                                totalSkipped = skippedAnswers
+                                
+                                localStorage.saveTestScore(courseId, testName, finalResultScore, finalMaxScore)
                                 
                                 com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
                                     putString("test_name", testName)
-                                    putInt("score", finalScore)
+                                    putDouble("score", finalResultScore.toDouble())
                                 }
                                 
-                                onFinalSubmit(finalScore, maxScore)
+                                examStep = ExamStep.RESULT
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
                         ) { Text("Yes, Submit") }
                     }
                 }
+            }
+        }
+        return
+    }
+
+    if (examStep == ExamStep.RESULT) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Exam Results", color = Color.White) },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.Close, tint = Color.White, contentDescription = "Close") }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF104E8B))
+                )
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(Color(0xFFF3F4F6))
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(0.9f).padding(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(testName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(120.dp).background(Color(0xFFEFF6FF), CircleShape).border(4.dp, Color(0xFF1E90FF), CircleShape)
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("$finalResultScore", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color(0xFF104E8B))
+                                Text("out of $finalMaxScore", fontSize = 14.sp, color = Color.Gray)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(0.9f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatCard(modifier = Modifier.weight(1f), title = "Correct", value = totalCorrect.toString(), color = StatusAnsweredColor)
+                    StatCard(modifier = Modifier.weight(1f), title = "Wrong", value = totalIncorrect.toString(), color = StatusNotAnsweredColor)
+                    StatCard(modifier = Modifier.weight(1f), title = "Skipped", value = totalSkipped.toString(), color = Color.Gray)
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Button(
+                    onClick = onReviewTest,
+                    modifier = Modifier.fillMaxWidth(0.9f).height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Visibility, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Review Answers", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                OutlinedButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier.fillMaxWidth(0.9f).height(50.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF104E8B)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Return to Course", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
         return
@@ -629,7 +749,7 @@ fun ExamScreen(
                                             Text(String.format("%02d:%02d", timeLeft / 60, timeLeft % 60), color = Color.White, fontWeight = FontWeight.Bold)
                                         }
                                     } else {
-                                        Button(onClick = onExitReview, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F3A68))) {
+                                        Button(onClick = onNavigateBack, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F3A68))) {
                                             Text("Exit Review")
                                         }
                                     }
@@ -742,8 +862,8 @@ fun ExamScreen(
                         ) {
                             Text("Question Type: Multiple Choice", fontSize = 12.sp, color = Color.DarkGray, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Marks: +1", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
-                                Text("Negative: 0", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
+                                Text("Marks: +$positiveMark", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
+                                Text("Negative: -$negativeMark", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -751,11 +871,13 @@ fun ExamScreen(
                             item {
                                 Row(verticalAlignment = Alignment.Top) {
                                     Text("Q ${currentSection.globalStartIndex + currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                    MathText(
-                                        text = currentQ.text, 
-                                        fontSizePx = 18,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        MathText(
+                                            text = currentQ.text, 
+                                            fontSizePx = 18
+                                        )
+                                        Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(24.dp))
                             }
@@ -765,7 +887,6 @@ fun ExamScreen(
                                 val isSelected = currentState.selectedOption == optIdx
                                 val isCorrectAnswer = currentQ.correct == optIdx
                                 
-                                // Clean, transparent backgrounds normally, with color only for selection/review
                                 val bgColor = if (isReviewMode) {
                                     if (isCorrectAnswer) Color(0xFFF0FDF4) else if (isSelected) Color(0xFFFEF2F2) else Color.Transparent
                                 } else if (isSelected) Color(0xFFEFF6FF) else Color.Transparent
@@ -775,11 +896,11 @@ fun ExamScreen(
                                 } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray.copy(alpha = 0.5f)
 
                                 val hexTextColor = if (isReviewMode) {
-                                    if (isCorrectAnswer) "#166534" // Dark Green
-                                    else if (isSelected) "#991B1B" // Dark Red
+                                    if (isCorrectAnswer) "#166534" 
+                                    else if (isSelected) "#991B1B" 
                                     else "#333333"
                                 } else {
-                                    if (isSelected) "#1E40AF" // Dark Blue
+                                    if (isSelected) "#1E40AF" 
                                     else "#333333"
                                 }
 
@@ -797,7 +918,6 @@ fun ExamScreen(
                                         .padding(horizontal = 8.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // 1. The Standard Radio Button
                                     val radioColor = if (isReviewMode) {
                                         if (isCorrectAnswer) StatusAnsweredColor
                                         else if (isSelected) StatusNotAnsweredColor
@@ -807,9 +927,8 @@ fun ExamScreen(
                                     }
 
                                     RadioButton(
-                                        // In review mode, show the correct answer as "selected" too
                                         selected = if (isReviewMode) isSelected || isCorrectAnswer else isSelected,
-                                        onClick = null, // Null because the Row handles the click area!
+                                        onClick = null,
                                         colors = RadioButtonDefaults.colors(
                                             selectedColor = radioColor,
                                             unselectedColor = radioColor
@@ -817,18 +936,15 @@ fun ExamScreen(
                                         modifier = Modifier.padding(end = 8.dp)
                                     )
                                     
-                                    // 2. The Option Text (Looks just like the question)
                                     Box(modifier = Modifier.weight(1f)) {
                                         MathText(
                                             text = optionText,
                                             fontSizePx = 16,
                                             textColorHex = hexTextColor
                                         )
-                                        // Invisible touch interceptor (Prevents WebView from stealing clicks)
                                         Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
                                     }
                                     
-                                    // 3. Review Mode Icons
                                     if (isReviewMode) {
                                         if (isCorrectAnswer) {
                                             Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
@@ -838,37 +954,26 @@ fun ExamScreen(
                                     }
                                 }
                             }
-                            
-                            if (isReviewMode) {
-                                item {
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    if (currentState.selectedOption == null) {
-                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)), border = BorderStroke(1.dp, Color.LightGray)) {
-                                            Text("You skipped this question.", modifier = Modifier.padding(12.dp), color = Color.Gray, fontWeight = FontWeight.Bold)
-                                        }
-                                    } else if (currentState.selectedOption == currentQ.correct) {
-                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)), border = BorderStroke(1.dp, StatusAnsweredColor.copy(alpha = 0.5f))) {
-                                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("You answered this correctly.", color = Color(0xFF166534), fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    } else {
-                                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)), border = BorderStroke(1.dp, StatusNotAnsweredColor.copy(alpha = 0.5f))) {
-                                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.Clear, tint = StatusNotAnsweredColor, contentDescription = "Incorrect")
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("You answered this incorrectly.", color = Color(0xFF991B1B), fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun StatCard(modifier: Modifier = Modifier, title: String, value: String, color: Color) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = color)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(title, fontSize = 12.sp, color = Color.Gray)
         }
     }
 }
