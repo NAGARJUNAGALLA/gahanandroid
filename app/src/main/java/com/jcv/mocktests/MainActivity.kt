@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
         // 3. Initialize Analytics
         com.jcv.mocktests.utils.AnalyticsHelper.init(this)
         
-        // 4. Security: Prevent Screenshots and Screen Recording (FIXED TYPO HERE)
+        // 4. Security: Prevent Screenshots and Screen Recording
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
@@ -158,6 +158,9 @@ fun MockTestsApp() {
             )
         }
         
+        // -----------------------------------------------------------------
+        // UPDATED EXAM ROUTE (Handles the merged Results & Review modes)
+        // -----------------------------------------------------------------
         composable(
             route = "exam/{courseId}/{testName}/{isReviewMode}",
             arguments = listOf(
@@ -171,45 +174,21 @@ fun MockTestsApp() {
             val isReviewMode = backStackEntry.arguments?.getBoolean("isReviewMode") ?: false
             
             ExamScreen(
-        courseId = courseId,
-        testName = testName,
-        isReviewMode = isReviewMode,
-        onFinalSubmit = { score, total ->
-            navController.navigate("results_screen/$score/$total") { 
-                popUpTo("main_dashboard/home") 
-            }
-        },
-        onExitReview = {
-            navController.popBackStack()
+                courseId = courseId,
+                testName = testName,
+                isReviewMode = isReviewMode,
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onReviewTest = {
+                    val encodedTestName = URLEncoder.encode(testName, "UTF-8")
+                    // Relaunch the exam screen but force isReviewMode to true
+                    navController.navigate("exam/$courseId/$encodedTestName/true") {
+                        popUpTo("course_details/$courseId")
+                    }
+                }
+            )
         }
-    )
-        }
-        composable(
-    route = "results_screen/{score}/{totalQuestions}",
-    arguments = listOf(
-        navArgument("score") { type = NavType.IntType },
-        navArgument("totalQuestions") { type = NavType.IntType }
-    )
-) { backStackEntry ->
-    
-    val finalScore = backStackEntry.arguments?.getInt("score") ?: 0
-    val total = backStackEntry.arguments?.getInt("totalQuestions") ?: 0
-    
-    // Calculate incorrect answers (assuming total - score = incorrect/skipped)
-    // Or just pass 0 if you are handling skipped questions differently
-    val incorrect = total - finalScore 
-
-    ResultScreen(
-        score = finalScore, 
-        totalQuestions = total,
-        incorrectAnswers = incorrect, // <--- ADD THIS LINE HERE
-        onNavigateHome = {
-            navController.navigate("main_dashboard/home") {
-                popUpTo(0)
-            }
-        }
-    )
-}
         
     }
 }
