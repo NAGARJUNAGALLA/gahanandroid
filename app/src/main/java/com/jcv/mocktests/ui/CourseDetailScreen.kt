@@ -22,7 +22,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage 
 
 val DarkHeaderColor = Color(0xFF181E2F)
-val ViewSeriesBlue = Color(0xFF1E90FF) 
+
 
 data class TestSummary(
     val name: String,
