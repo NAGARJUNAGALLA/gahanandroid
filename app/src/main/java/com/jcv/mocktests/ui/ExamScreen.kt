@@ -765,15 +765,15 @@ fun ExamScreen(
                                 val isSelected = currentState.selectedOption == optIdx
                                 val isCorrectAnswer = currentQ.correct == optIdx
                                 
+                                // Clean, transparent backgrounds normally, with color only for selection/review
                                 val bgColor = if (isReviewMode) {
-                                    if (isCorrectAnswer) Color(0xFFF0FDF4) else if (isSelected) Color(0xFFFEF2F2) else Color(0xFFF9FAFB)
-                                } else if (isSelected) Color(0xFFEFF6FF) else Color.White
+                                    if (isCorrectAnswer) Color(0xFFF0FDF4) else if (isSelected) Color(0xFFFEF2F2) else Color.Transparent
+                                } else if (isSelected) Color(0xFFEFF6FF) else Color.Transparent
                                 
                                 val borderColor = if (isReviewMode) {
-                                    if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray
-                                } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray
+                                    if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray.copy(alpha = 0.5f)
+                                } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray.copy(alpha = 0.5f)
 
-                                // FIX 1: Updated the Text Color to be highly readable!
                                 val hexTextColor = if (isReviewMode) {
                                     if (isCorrectAnswer) "#166534" // Dark Green
                                     else if (isSelected) "#991B1B" // Dark Red
@@ -786,7 +786,7 @@ fun ExamScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 6.dp)
+                                        .padding(vertical = 4.dp)
                                         .border(1.dp, borderColor, RoundedCornerShape(8.dp))
                                         .background(bgColor, RoundedCornerShape(8.dp))
                                         .clip(RoundedCornerShape(8.dp))
@@ -794,42 +794,42 @@ fun ExamScreen(
                                             questionStates[currentSecIndex][currentQIndex] = currentState.copy(selectedOption = optIdx)
                                             saveProgressLocally()
                                         }
-                                        .padding(12.dp),
+                                        .padding(horizontal = 8.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .background(
-                                                if (isReviewMode && isCorrectAnswer) StatusAnsweredColor 
-                                                else if (isReviewMode && isSelected) StatusNotAnsweredColor 
-                                                else Color(0xFFF3F4F6), 
-                                                CircleShape
-                                            )
-                                            .border(1.dp, if (isReviewMode && (isCorrectAnswer || isSelected)) Color.Transparent else Color.LightGray, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = ('A' + optIdx).toString(),
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isReviewMode && (isCorrectAnswer || isSelected)) Color.White else Color.Gray
-                                        )
+                                    // 1. The Standard Radio Button
+                                    val radioColor = if (isReviewMode) {
+                                        if (isCorrectAnswer) StatusAnsweredColor
+                                        else if (isSelected) StatusNotAnsweredColor
+                                        else Color.LightGray
+                                    } else {
+                                        if (isSelected) Color(0xFF1E90FF) else Color.Gray
                                     }
+
+                                    RadioButton(
+                                        // In review mode, show the correct answer as "selected" too
+                                        selected = if (isReviewMode) isSelected || isCorrectAnswer else isSelected,
+                                        onClick = null, // Null because the Row handles the click area!
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = radioColor,
+                                            unselectedColor = radioColor
+                                        ),
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
                                     
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    
+                                    // 2. The Option Text (Looks just like the question)
                                     Box(modifier = Modifier.weight(1f)) {
                                         MathText(
                                             text = optionText,
                                             fontSizePx = 16,
                                             textColorHex = hexTextColor
                                         )
-                                        // FIX 2: Transparent overlay Box prevents WebView from stealing the click!
+                                        // Invisible touch interceptor (Prevents WebView from stealing clicks)
                                         Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
                                     }
                                     
+                                    // 3. Review Mode Icons
                                     if (isReviewMode) {
-                                        Spacer(modifier = Modifier.width(8.dp))
                                         if (isCorrectAnswer) {
                                             Icon(Icons.Default.Check, tint = StatusAnsweredColor, contentDescription = "Correct")
                                         } else if (isSelected) {
