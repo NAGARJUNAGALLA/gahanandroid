@@ -21,10 +21,9 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage 
 
-// Colors
 val DarkHeaderColor = Color(0xFF181E2F)
+val ViewSeriesBlue = Color(0xFF1E90FF) 
 
-// NEW: Data class to hold the parsed test details for the UI
 data class TestSummary(
     val name: String,
     val questionCount: Int,
@@ -36,7 +35,7 @@ data class TestSummary(
 fun CourseDetailScreen(
     courseId: String,
     onNavigateToExam: (courseId: String, testName: String, isReviewMode: Boolean) -> Unit,
-    onNavigateToStudyMaterial: () -> Unit,
+    onNavigateToStudyMaterial: () -> Unit, // Kept to prevent breaking MainActivity, but no longer used in UI
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -45,7 +44,6 @@ fun CourseDetailScreen(
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT")
     
-    // Updated to hold our new TestSummary objects
     var tests by remember { mutableStateOf<List<TestSummary>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
@@ -59,7 +57,6 @@ fun CourseDetailScreen(
                     
                     val parsedTests = mutableListOf<TestSummary>()
                     
-                    // Parse the structure to count questions for the 2nd row of the card
                     testsMap?.forEach { (testName, testData) ->
                         var qCount = 0
                         try {
@@ -74,7 +71,7 @@ fun CourseDetailScreen(
                         parsedTests.add(TestSummary(
                             name = testName,
                             questionCount = qCount,
-                            timeMinutes = qCount // Assuming 1 min per question based on previous ExamScreen logic
+                            timeMinutes = qCount 
                         ))
                     }
                     tests = parsedTests
@@ -129,16 +126,37 @@ fun CourseDetailScreen(
                     Text("Comprehensive mock tests designed to help you prepare and excel.")
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    Button(
-                        onClick = onNavigateToStudyMaterial, 
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
+                    // NEW: Dynamic Stats Row for Overview
+                    val totalQs = tests.sumOf { it.questionCount }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("View Study Material", color = Color.White, fontWeight = FontWeight.Medium)
+                        Card(
+                            modifier = Modifier.weight(1f).padding(end = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)),
+                            elevation = CardDefaults.cardElevation(0.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("${tests.size}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
+                                Text("Total Tests", fontSize = 12.sp, color = Color.Gray)
+                            }
+                        }
+                        
+                        Card(
+                            modifier = Modifier.weight(1f).padding(start = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)),
+                            elevation = CardDefaults.cardElevation(0.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("$totalQs", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
+                                Text("Total Questions", fontSize = 12.sp, color = Color.Gray)
+                            }
+                        }
                     }
                     
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
                     
                     OutlinedButton(
                         onClick = { selectedTab = 1 }, 
@@ -176,7 +194,6 @@ fun CourseDetailScreen(
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
-                                        // ROW 1: Test Name
                                         Text(
                                             text = test.name, 
                                             style = MaterialTheme.typography.titleMedium,
@@ -186,7 +203,6 @@ fun CourseDetailScreen(
                                         
                                         Spacer(modifier = Modifier.height(12.dp))
                                         
-                                        // ROW 2: Questions and Time
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -208,8 +224,11 @@ fun CourseDetailScreen(
                                         Divider(color = Color(0xFFF3F4F6))
                                         Spacer(modifier = Modifier.height(16.dp))
                                         
-                                        // ROW 3: Action Buttons & Score
                                         if (alreadyAttempted && testScore != null) {
+                                            val formatScore = { value: Float -> 
+                                                if (value % 1.0f == 0f) value.toInt().toString() else value.toString() 
+                                            }
+                                            
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -218,7 +237,7 @@ fun CourseDetailScreen(
                                                 Column {
                                                     Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
                                                     Text(
-                                                        text = "${testScore.first} / ${testScore.second}", 
+                                                        text = "${formatScore(testScore.first)} / ${formatScore(testScore.second)}", 
                                                         color = Color(0xFF27AE60),
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 18.sp
