@@ -1,10 +1,14 @@
 package com.jcv.mocktests.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,11 +17,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage 
 
-// Reusing the same blue palette
-val DarkHeaderColor = Color(0xFF181E2F) // Matching the dark top bar from the image
+// Colors
+val DarkHeaderColor = Color(0xFF181E2F)
+val ViewSeriesBlue = Color(0xFF1E90FF) // Added to ensure it compiles
+
+// NEW: Data class to hold the parsed test details for the UI
+data class TestSummary(
+    val name: String,
+    val questionCount: Int,
+    val timeMinutes: Int
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +46,8 @@ fun CourseDetailScreen(
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT")
     
-    var testNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Updated to hold our new TestSummary objects
+    var tests by remember { mutableStateOf<List<TestSummary>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(courseId) {
@@ -43,7 +57,28 @@ fun CourseDetailScreen(
                 if (doc.exists()) {
                     val data = doc.data
                     val testsMap = data?.get("tests") as? Map<String, Any>
-                    testNames = testsMap?.keys?.toList() ?: emptyList()
+                    
+                    val parsedTests = mutableListOf<TestSummary>()
+                    
+                    // Parse the structure to count questions for the 2nd row of the card
+                    testsMap?.forEach { (testName, testData) ->
+                        var qCount = 0
+                        try {
+                            val sectionsMap = testData as? Map<String, List<Any>>
+                            sectionsMap?.forEach { (_, qList) ->
+                                qCount += qList.size
+                            }
+                        } catch (e: Exception) {
+                            // Fallback if structure varies
+                        }
+                        
+                        parsedTests.add(TestSummary(
+                            name = testName,
+                            questionCount = qCount,
+                            timeMinutes = qCount // Assuming 1 min per question based on previous ExamScreen logic
+                        ))
+                    }
+                    tests = parsedTests
                 }
                 isLoading = false
             }
@@ -62,7 +97,7 @@ fun CourseDetailScreen(
                     } 
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkHeaderColor // Dark navy background like the image
+                    containerColor = DarkHeaderColor
                 )
             )
         }
@@ -70,7 +105,7 @@ fun CourseDetailScreen(
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             TabRow(
                 selectedTabIndex = selectedTab,
-                contentColor = ViewSeriesBlue, // Blue indicator line
+                contentColor = ViewSeriesBlue,
                 containerColor = Color.White
             ) {
                 tabs.forEachIndexed { index, title ->
@@ -116,47 +151,97 @@ fun CourseDetailScreen(
                     }
                 }
             } else {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF9FAFB)), contentAlignment = Alignment.TopCenter) {
                     if (isLoading) {
-                        CircularProgressIndicator(color = ViewSeriesBlue)
-                    } else if (testNames.isEmpty()) {
-                        Text("No tests found for this course.")
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = ViewSeriesBlue)
+                        }
+                    } else if (tests.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No tests found for this course.", color = Color.Gray)
+                        }
                     } else {
-                        LazyColumn(modifier = Modifier.padding(16.dp).fillMaxSize()) {
-                            items(testNames) { testName ->
-                                val alreadyAttempted = localStorage.isTestAttempted(courseId, testName)
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(tests) { test ->
+                                val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
+                                val testScore = localStorage.getTestScore(courseId, test.name)
                                 
                                 Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp)
-                                        .clickable { 
-                                            onNavigateToExam(courseId, testName, alreadyAttempted) 
-                                        },
+                                    modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(containerColor = Color.White),
                                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        // ROW 1: Test Name
                                         Text(
-                                            text = testName, 
+                                            text = test.name, 
                                             style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold
+                                            fontWeight = FontWeight.Bold,
+                                            color = DarkHeaderColor
                                         )
                                         
-                                        if (alreadyAttempted) {
-                                            Text(
-                                                text = "Review", 
-                                                color = ViewSeriesBlue,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        
+                                        // ROW 2: Questions and Time
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.List, contentDescription = "Questions", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Schedule, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        HorizontalDivider(color = Color(0xFFF3F4F6))
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        
+                                        // ROW 3: Action Buttons & Score
+                                        if (alreadyAttempted && testScore != null) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                                    Text(
+                                                        text = "${testScore.first} / ${testScore.second}", 
+                                                        color = Color(0xFF27AE60),
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 18.sp
+                                                    )
+                                                }
+                                                OutlinedButton(
+                                                    onClick = { onNavigateToExam(courseId, test.name, true) },
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ViewSeriesBlue),
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    Text("Review Test", fontWeight = FontWeight.Bold)
+                                                }
+                                            }
                                         } else {
-                                            Text(">", color = Color.Gray, fontWeight = FontWeight.Bold)
+                                            Button(
+                                                onClick = { onNavigateToExam(courseId, test.name, false) },
+                                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
+                                            ) {
+                                                Text("Take Test", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                            }
                                         }
                                     }
                                 }
