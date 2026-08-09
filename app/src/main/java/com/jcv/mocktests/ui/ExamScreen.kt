@@ -458,7 +458,7 @@ fun ExamScreen(
                                 totalIncorrect = wrongAnswers
                                 totalSkipped = skippedAnswers
                                 
-                                localStorage.saveTestScore(courseId, testName, finalResultScore, finalMaxScore)
+                                localStorage.saveTestScore(courseId, testName, finalResultScore.toInt(), finalMaxScore.toInt())
                                 
                                 com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
                                     putString("test_name", testName)
@@ -542,7 +542,7 @@ fun ExamScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Default.Visibility, contentDescription = null, tint = Color.White)
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Review Answers", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
