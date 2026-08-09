@@ -85,6 +85,8 @@ fun ExamScreen(
     var totalQuestions by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var hasAgreedToRules by remember { mutableStateOf(false) }
+    var positiveMark by remember { mutableIntStateOf(1) }
+    var isDropdownExpanded by remember { mutableStateOf(false) }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -244,6 +246,33 @@ fun ExamScreen(
                             )
                             Text("Choose Language: English | I have read and understood the instructions.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                       // ADD THIS: Marking Scheme Dropdown
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
+                            OutlinedButton(
+                                onClick = { isDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF104E8B))
+                            ) {
+                                Text("Marking Scheme: +$positiveMark Mark(s) per correct answer")
+                            }
+                            DropdownMenu(
+                                expanded = isDropdownExpanded,
+                                onDismissRequest = { isDropdownExpanded = false },
+                                modifier = Modifier.fillMaxWidth(0.9f).background(Color.White)
+                            ) {
+                                listOf(1, 2, 3, 4).forEach { mark ->
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Text("+$mark Marks ${if(mark==4) "(IIT JEE Style)" else if(mark==2) "(SSC CGL Style)" else ""}") 
+                                        },
+                                        onClick = {
+                                            positiveMark = mark
+                                            isDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        } 
                         Button(
                             onClick = { 
                         
@@ -392,20 +421,29 @@ fun ExamScreen(
                             onClick = {
                                 saveProgressLocally()
                                 
-                                // REVERTED TO INTEGER SCORING (NO NEGATIVE MARKS)
-                                var score = 0
+                                // 1. Count correct answers
+                                var correctAnswers = 0
                                 sections.forEachIndexed { sIdx, section ->
                                     section.questions.forEachIndexed { qIdx, q ->
-                                        if (questionStates[sIdx][qIdx].selectedOption == q.correct) score++
+                                        if (questionStates[sIdx][qIdx].selectedOption == q.correct) correctAnswers++
                                     }
                                 }
+                                
+                                // 2. Multiply by selected positive mark
+                                val finalScore = correctAnswers * positiveMark
+                                val maxScore = totalQuestions * positiveMark
+                                
+                                // 3. Save to LocalStorage
+                                localStorage.saveTestScore(courseId, testName, finalScore, maxScore)
+                                
+                                // 4. Log Analytics
                                 com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
                                     putString("test_name", testName)
-                                    putInt("score", score)
-                                    putInt("total_questions", totalQuestions)
+                                    putInt("score", finalScore)
                                 }
-                                localStorage.markTestAsAttempted(courseId, testName)
-                                onFinalSubmit(score, totalQuestions)
+                                
+                                // 5. Navigate to results
+                                onFinalSubmit(finalScore, maxScore)
                             },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
