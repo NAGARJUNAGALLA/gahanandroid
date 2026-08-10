@@ -25,7 +25,11 @@ import com.jcv.mocktests.ui.*
 import java.net.URLDecoder
 import java.net.URLEncoder
 import androidx.fragment.app.FragmentActivity
-
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.jcv.mocktests.utils.LocalStorage
 class MainActivity : FragmentActivity() {
 
     // 1. The permission request launcher for Android 13+ Notifications
@@ -83,6 +87,10 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 fun MockTestsApp() {
+    val context = LocalContext.current
+    val localStorage = remember { LocalStorage(context) }
+    val systemTheme = isSystemInDarkTheme()
+    var isDarkMode by remember { mutableStateOf(localStorage.isDarkMode(systemTheme)) }
     val navController = rememberNavController()
     
     val auth = remember { FirebaseAuth.getInstance() }
