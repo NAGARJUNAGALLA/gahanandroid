@@ -59,6 +59,14 @@ data class ExamSection(
     val globalStartIndex: Int
 )
 
+// NEW: Data class for Subject-Wise Analytics
+data class SectionStat(
+    val name: String, 
+    val correct: Int, 
+    val total: Int, 
+    val accuracy: Float
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExamScreen(
@@ -75,6 +83,12 @@ fun ExamScreen(
 
     var sections by remember { mutableStateOf<List<ExamSection>>(emptyList()) }
     val questionStates = remember { mutableStateListOf<MutableList<QuestionState>>() }
+    
+    // NEW: State for tracking Doubt Bookmarks
+    val bookmarkedQuestions = remember { mutableStateListOf<Pair<Int, Int>>() }
+    
+    // NEW: State for Subject-wise Accuracy
+    var sectionStats by remember { mutableStateOf<List<SectionStat>>(emptyList()) }
     
     // UI State Management
     var examStep by remember { mutableStateOf(if (isReviewMode) ExamStep.EXAM else ExamStep.INSTRUCTIONS) }
@@ -106,15 +120,19 @@ fun ExamScreen(
     val userName = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Student"
     val userIdentifier = currentUser?.email ?: currentUser?.uid ?: "JCV-USER"
 
-    // Helper function to save progress locally
+    // Helper function to save progress & bookmarks locally
     fun saveProgressLocally() {
         if (isReviewMode || sections.isEmpty()) return
         
         val flatStates = questionStates.flatten()
         val statesString = flatStates.joinToString(";") { "${it.status.name},${it.selectedOption ?: -1}" }
         
+        // NEW: Save Bookmarks
+        val bmString = bookmarkedQuestions.joinToString(";") { "${it.first},${it.second}" }
+        
         prefs.edit()
             .putString(prefKey, statesString)
+            .putString("${prefKey}_bookmarks", bmString)
             .putInt("${prefKey}_time", timeLeft)
             .apply()
     }
@@ -147,10 +165,22 @@ fun ExamScreen(
                     sections = parsedSections
                     totalQuestions = globalIndex
                     questionStates.clear()
+                    bookmarkedQuestions.clear()
                     
                     val savedStatesStr = prefs.getString(prefKey, "")
+                    val savedBookmarksStr = prefs.getString("${prefKey}_bookmarks", "")
                     val savedTime = prefs.getInt("${prefKey}_time", totalQuestions * 60)
                     
+                    // NEW: Load Bookmarks
+                    if (!savedBookmarksStr.isNullOrBlank()) {
+                        savedBookmarksStr.split(";").forEach {
+                            val parts = it.split(",")
+                            if (parts.size == 2) {
+                                bookmarkedQuestions.add(parts[0].toInt() to parts[1].toInt())
+                            }
+                        }
+                    }
+
                     if (!savedStatesStr.isNullOrBlank()) {
                         try {
                             val restoredFlat = savedStatesStr.split(";").map {
@@ -435,18 +465,29 @@ fun ExamScreen(
                                 var wrongAnswers = 0
                                 var skippedAnswers = 0
                                 
+                                // NEW: Calculate Subject-wise accuracy
+                                val sStats = mutableListOf<SectionStat>()
+                                
                                 sections.forEachIndexed { sIdx, section ->
+                                    var secCorrect = 0
+                                    
                                     section.questions.forEachIndexed { qIdx, q ->
                                         val selected = questionStates[sIdx][qIdx].selectedOption
                                         if (selected == null || selected == -1) {
                                             skippedAnswers++
                                         } else if (selected == q.correct) {
                                             correctAnswers++
+                                            secCorrect++
                                         } else {
                                             wrongAnswers++
                                         }
                                     }
+                                    
+                                    val acc = if (section.questions.isNotEmpty()) (secCorrect.toFloat() / section.questions.size) * 100 else 0f
+                                    sStats.add(SectionStat(section.name, secCorrect, section.questions.size, acc))
                                 }
+                                
+                                sectionStats = sStats
                                 
                                 val posScore = correctAnswers * positiveMark
                                 val negScore = wrongAnswers * negativeMark
@@ -534,7 +575,53 @@ fun ExamScreen(
                     StatCard(modifier = Modifier.weight(1f), title = "Skipped", value = totalSkipped.toString(), color = Color.Gray)
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // NEW: Subject-Wise Accuracy Card
+                if (sectionStats.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(0.9f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Subject-wise Accuracy", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF104E8B), modifier = Modifier.padding(bottom = 12.dp))
+                            
+                            sectionStats.forEach { stat ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = stat.name, 
+                                        modifier = Modifier.weight(1.2f), 
+                                        fontSize = 12.sp, 
+                                        fontWeight = FontWeight.SemiBold, 
+                                        maxLines = 1, 
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    
+                                    LinearProgressIndicator(
+                                        progress = stat.accuracy / 100f,
+                                        modifier = Modifier.weight(2f).height(8.dp).clip(RoundedCornerShape(4.dp)),
+                                        color = if (stat.accuracy >= 70f) Color(0xFF4CAF50) else if (stat.accuracy >= 40f) Color(0xFFFF9800) else Color(0xFFF44336),
+                                        trackColor = Color(0xFFF3F4F6)
+                                    )
+                                    
+                                    Text(
+                                        text = "${stat.accuracy.toInt()}%", 
+                                        modifier = Modifier.width(40.dp), 
+                                        textAlign = TextAlign.End, 
+                                        fontSize = 12.sp, 
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
                     onClick = onReviewTest,
@@ -546,6 +633,16 @@ fun ExamScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Review Answers", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
+                
+                // NEW: Instruction for Bookmarks
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "💡 Tip: In Review Mode, open the Palette to quickly find your ⭐ Bookmarked Doubt Questions.",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
@@ -695,6 +792,16 @@ fun ExamScreen(
                                             Text("${currentSection.globalStartIndex + idx + 1}", color = textColor, fontWeight = FontWeight.Bold)
                                             if (!isReviewMode && state.status == QuestionStatus.ANSWERED_AND_MARKED) {
                                                 Box(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(6.dp).background(Color.Green, CircleShape))
+                                            }
+                                            
+                                            // NEW: Show a small star on the palette if bookmarked
+                                            if (bookmarkedQuestions.contains(currentSecIndex to idx)) {
+                                                Icon(
+                                                    Icons.Default.Star, 
+                                                    contentDescription = "Bookmarked", 
+                                                    tint = Color(0xFFFFD700), 
+                                                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp).size(12.dp)
+                                                )
                                             }
                                         }
                                     }
@@ -869,14 +976,33 @@ fun ExamScreen(
 
                         LazyColumn(modifier = Modifier.weight(1f).padding(16.dp)) {
                             item {
-                                Row(verticalAlignment = Alignment.Top) {
+                                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                     Text("Q ${currentSection.globalStartIndex + currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    
                                     Box(modifier = Modifier.weight(1f)) {
                                         MathText(
                                             text = currentQ.text, 
                                             fontSizePx = 18
                                         )
                                         Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
+                                    }
+                                    
+                                    // NEW: Bookmark Icon next to Question
+                                    IconButton(
+                                        onClick = {
+                                            val pair = currentSecIndex to currentQIndex
+                                            if (bookmarkedQuestions.contains(pair)) bookmarkedQuestions.remove(pair)
+                                            else bookmarkedQuestions.add(pair)
+                                            saveProgressLocally()
+                                        },
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = "Bookmark Doubt",
+                                            tint = if (bookmarkedQuestions.contains(currentSecIndex to currentQIndex)) Color(0xFFFFC107) else Color.LightGray,
+                                            modifier = Modifier.size(28.dp)
+                                        )
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(24.dp))
