@@ -131,6 +131,11 @@ fun MockTestsApp() {
             
             MainDashboardScreen(
                 initialTab = tab,
+                isDarkMode = isDarkMode, // Passes the dark mode state down
+                onToggleTheme = {        // Handles the toggle click from the dashboard
+                    isDarkMode = !isDarkMode
+                    localStorage.setDarkMode(isDarkMode)
+                },
                 onNavigateToCourse = { courseId -> navController.navigate("course_details/$courseId") },
                 onNavigateToLogin = { 
                     navController.navigate("login") {
