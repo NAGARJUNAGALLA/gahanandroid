@@ -106,28 +106,10 @@ fun MockTestsApp() {
         composable("splash") {
             SplashScreen(
                 onSplashFinished = {
-                    val nextRoute = if (currentUser != null) "unlock" else "login"
+                    // FIXED: Skip the unlock screen entirely and go straight to dashboard if logged in
+                    val nextRoute = if (currentUser != null) "main_dashboard/home" else "login"
                     navController.navigate(nextRoute) {
                         popUpTo("splash") { inclusive = true }
-                    }
-                }
-            )
-        }
-        
-        // ADD THIS NEW ROUTE
-        composable("unlock") {
-            UnlockScreen(
-                onUnlockSuccess = {
-                    // Fingerprint matched! Proceed to the main dashboard.
-                    navController.navigate("main_dashboard/home") {
-                        popUpTo("unlock") { inclusive = true }
-                    }
-                },
-                onLogout = {
-                    // User chose to log out
-                    auth.signOut()
-                    navController.navigate("login") {
-                        popUpTo("unlock") { inclusive = true }
                     }
                 }
             )
