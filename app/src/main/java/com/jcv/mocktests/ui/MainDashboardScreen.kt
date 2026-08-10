@@ -10,18 +10,15 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,11 +41,11 @@ import kotlinx.coroutines.launch
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES }
 
-val ThemeBlue = Color(0xFF1976D2)
-val LightGreyBg = Color(0xFFF5F6FA)
-val RedBadgeColor = Color(0xFFE53935)
+private val ThemeBlue = Color(0xFF1976D2)
+private val LightGreyBg = Color(0xFFF5F6FA)
+private val RedBadgeColor = Color(0xFFE53935)
 
-val PastelColors = listOf(
+private val PastelColors = listOf(
     Color(0xFFFFF3E0), 
     Color(0xFFFCE4EC), 
     Color(0xFFF0F4C3), 
@@ -69,8 +66,8 @@ data class CourseModel(
 @Composable
 fun MainDashboardScreen(
     initialTab: String,
-    isDarkMode: Boolean,           // NEW: Dark Mode State
-    onToggleTheme: () -> Unit,     // NEW: Dark Mode Toggle Function
+    isDarkMode: Boolean,           
+    onToggleTheme: () -> Unit,     
     onNavigateToCourse: (String) -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
@@ -108,7 +105,7 @@ fun MainDashboardScreen(
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
-        // 1. Load Local Cache (Removed Pending/Rejected logic)
+        // 1. Load Local Cache
         val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
         val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
         
@@ -171,7 +168,6 @@ fun MainDashboardScreen(
         }
     }
 
-    // NEW: ALWAYS NAVIGATE TO COURSE OVERVIEW
     val handleCourseClick: (CourseModel) -> Unit = { course ->
         if (course.sheetId.isNotBlank()) {
             onNavigateToCourse(course.sheetId)
@@ -270,7 +266,6 @@ fun MainDashboardScreen(
                         }
                     },
                     actions = {
-                        // NEW: DARK MODE TOGGLE
                         IconButton(onClick = onToggleTheme) {
                             Icon(
                                 imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
@@ -323,7 +318,7 @@ fun MainDashboardScreen(
                             allCourses = allCourses,
                             purchasedCourses = purchasedCourses,
                             proCourses = proCourses,
-                            approvedSheetIds = approvedSheetIds, // Passed to know unlock status
+                            approvedSheetIds = approvedSheetIds,
                             auth = auth,
                             isLoading = isLoading,
                             onCourseClick = handleCourseClick
@@ -433,6 +428,7 @@ fun DashboardHomeContent(
                     .basicMarquee()
             )
 
+            // Keeping the main categories as a visually appealing Grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -468,10 +464,10 @@ fun DashboardHomeContent(
             }
         }
 
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, bottom = 16.dp)
             ) {
                 IconButton(
                     onClick = { selectedCategory = null },
@@ -495,17 +491,14 @@ fun DashboardHomeContent(
                     Text("No courses found in this category.", color = Color.Gray)
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                // Changed from Grid to List for the horizontal card design
+                LazyColumn(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     itemsIndexed(displayedCourses) { index, course ->
                         CourseCardView(
                             course = course, 
-                            backgroundColor = PastelColors[index % PastelColors.size],
-                            isUnlocked = approvedSheetIds.contains(course.sheetId) // Pass Status
+                            isUnlocked = approvedSheetIds.contains(course.sheetId)
                         ) { onCourseClick(course) }
                     }
                 }
@@ -599,19 +592,23 @@ fun CourseGridScreen(
     approvedSheetIds: List<String>, 
     onCourseClick: (CourseModel) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("$title (${courses.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
+        Text(
+            text = "$title (${courses.size})", 
+            fontSize = 16.sp, 
+            fontWeight = FontWeight.Bold, 
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
         Spacer(modifier = Modifier.height(12.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        
+        // Changed from Grid to List for the horizontal card design
+        LazyColumn(
             modifier = Modifier.fillMaxSize()
         ) {
             itemsIndexed(courses) { index, course ->
                 CourseCardView(
                     course = course,
-                    backgroundColor = PastelColors[index % PastelColors.size],
                     isUnlocked = approvedSheetIds.contains(course.sheetId)
                 ) { onCourseClick(course) }
             }
@@ -619,140 +616,140 @@ fun CourseGridScreen(
     }
 }
 
-// NEW: Added isUnlocked parameter to control the Lock/Checkmark UI
+// ---------------------------------------------------------------------------
+// NEW HORIZONTAL LIST CARD VIEW (Matches User Screenshot)
+// ---------------------------------------------------------------------------
 @Composable
 fun CourseCardView(
     course: CourseModel, 
-    backgroundColor: Color, 
     isUnlocked: Boolean, 
     onClick: () -> Unit
 ) {
-    val originalPrice = course.fee * 1.5
-    val context = LocalContext.current
+    // 80% Discount Math: If the fee is 20% of the total price, Original Price = Fee * 5
+    val originalPrice = course.fee * 5
     
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    Column(
         modifier = Modifier
-            .clickable { onClick() }
             .fillMaxWidth()
+            .clickable { onClick() }
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // LEFT SIDE: THUMBNAIL PLACEHOLDER
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(90.dp)
-                    .background(Color.White.copy(alpha = 0.4f))
+                    .width(130.dp)
+                    .height(85.dp)
+                    .background(Color(0xFF0F172A), RoundedCornerShape(8.dp)) // Dark Slate Background
+                    .border(1.dp, Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                // Background Box Content
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = ThemeBlue, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("JCV MOCK TESTS", color = ThemeBlue, fontWeight = FontWeight.Black, fontSize = 12.sp)
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Box(modifier = Modifier.background(RedBadgeColor, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                        Text(course.title.take(15).uppercase(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("FULL COURSE", color = Color.DarkGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-
-                // DYNAMIC STATUS ICON (Top Right)
-                Box(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                    if (isUnlocked) {
-                        Icon(
-                            Icons.Default.CheckCircle, 
-                            contentDescription = "Purchased", 
-                            tint = Color(0xFF4CAF50), 
-                            modifier = Modifier.size(24.dp).background(Color.White, CircleShape)
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Lock, 
-                            contentDescription = "Locked", 
-                            tint = Color.Gray, 
-                            modifier = Modifier.size(24.dp).background(Color.White, CircleShape).padding(4.dp)
-                        )
-                    }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow, 
+                        contentDescription = "Play", 
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "JCV MOCK TESTS", 
+                        color = Color.White, 
+                        fontSize = 10.sp, 
+                        fontWeight = FontWeight.Black
+                    )
                 }
             }
 
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(
-                    text = course.title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.Black,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.height(32.dp)
-                )
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // RIGHT SIDE: COURSE DETAILS & PRICING
+            Column(modifier = Modifier.weight(1f)) {
                 
+                // ROW 1: Tags & Lock/Unlock Status
                 Row(
-                    modifier = Modifier.fillMaxWidth(), 
-                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.ThumbUp, contentDescription = "Likes", tint = RedBadgeColor, modifier = Modifier.size(12.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("100+", fontSize = 10.sp, color = Color.DarkGray)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CourseTag("TESTS")
+                        CourseTag("VIDEOS")
+                        CourseTag("FILES")
                     }
+                    
+                    if (isUnlocked) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = "Unlocked", tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                    } else {
+                        Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                    }
+                }
+
+                // ROW 2: Course Title
+                Text(
+                    text = course.title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    lineHeight = 18.sp
+                )
+
+                // ROW 3: Pricing Data
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "₹${course.fee.toInt()}",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = "₹${originalPrice.toInt()}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8),
+                        textDecoration = TextDecoration.LineThrough
+                    )
                     
                     Spacer(modifier = Modifier.width(12.dp))
                     
-                    IconButton(
-                        onClick = {
-                            val shareText = "Check out this amazing course: ${course.title} on the JCV Mock Tests App!"
-                            val sendIntent: Intent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, shareText)
-                                type = "text/plain"
-                            }
-                            val shareIntent = Intent.createChooser(sendIntent, "Share Course via")
-                            context.startActivity(shareIntent)
-                        },
-                        modifier = Modifier.size(20.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Share, 
-                            contentDescription = "Share Course", 
-                            tint = ThemeBlue, 
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-                
-                Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color.White.copy(alpha = 0.5f), thickness = 1.dp)
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Column {
-                        Text("₹", fontSize = 10.sp, color = Color.DarkGray)
-                        Text(
-                            text = course.fee.toInt().toString(), 
-                            fontSize = 14.sp, 
-                            color = Color.Black,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("₹${originalPrice.toInt()}", fontSize = 10.sp, color = Color.DarkGray, textDecoration = TextDecoration.LineThrough)
-                        Text("30% OFF", fontSize = 10.sp, color = RedBadgeColor, fontWeight = FontWeight.Bold)
-                    }
+                    Text(
+                        text = "80% OFF",
+                        fontSize = 12.sp,
+                        color = Color(0xFFE07A5F), // Coral/Red tint
+                        fontWeight = FontWeight.ExtraBold
+                    )
                 }
             }
         }
+        
+        // Thin gray line separating list items
+        Divider(color = Color.LightGray.copy(alpha = 0.3f), thickness = 1.dp)
+    }
+}
+
+// Helper Composable for the small gray tag chips
+@Composable
+fun CourseTag(text: String) {
+    Box(
+        modifier = Modifier
+            .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 9.sp,
+            color = Color.Gray,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
