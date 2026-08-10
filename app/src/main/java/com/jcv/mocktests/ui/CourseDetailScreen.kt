@@ -1,5 +1,6 @@
 package com.jcv.mocktests.ui
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,6 +54,15 @@ data class TestSummary(
     val timeMinutes: Int
 )
 
+// NEW: Data class to hold Bookmarked Questions
+data class BookmarkedQuestion(
+    val testName: String,
+    val sectionName: String,
+    val questionText: String,
+    val options: List<String>,
+    val correctOptionIndex: Int
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseDetailScreen(
@@ -62,15 +73,17 @@ fun CourseDetailScreen(
 ) {
     val context = LocalContext.current
     val localStorage = remember { LocalStorage(context) }
+    val examPrefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) } // Fetch Exam Prefs
     val auth = remember { FirebaseAuth.getInstance() }
     
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("OVERVIEW", "CONTENT")
+    val tabs = listOf("OVERVIEW", "CONTENT", "SAVED") // NEW: Added 3rd Tab
     
     var tests by remember { mutableStateOf<List<TestSummary>>(emptyList()) }
+    var bookmarkedQuestions by remember { mutableStateOf<List<BookmarkedQuestion>>(emptyList()) } // NEW: State for bookmarks
     var isLoading by remember { mutableStateOf(true) }
 
-    // Dynamic Payment & Subscription States from Firebase
+    // Dynamic Payment & Subscription States
     var upiId by remember { mutableStateOf("") }
     var merchantName by remember { mutableStateOf("JCV MOCK TESTS") }
     var staticQrUrl by remember { mutableStateOf("") }
@@ -79,7 +92,7 @@ fun CourseDetailScreen(
     var courseDuration by remember { mutableIntStateOf(1) }
     
     var paymentStatus by remember { mutableStateOf<String?>(null) }
-    var subscriptionExpiry by remember { mutableStateOf<Date?>(null) } // NEW: Holds Expiry Date
+    var subscriptionExpiry by remember { mutableStateOf<Date?>(null) } 
     var showPaymentDialog by remember { mutableStateOf(false) }
     var isSubmittingPayment by remember { mutableStateOf(false) }
 
@@ -87,7 +100,7 @@ fun CourseDetailScreen(
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
-        // 1. Fetch Merchant Settings for Payment
+        // 1. Fetch Merchant Settings
         db.collection("settings").get().addOnSuccessListener { snaps ->
             if (!snaps.isEmpty) {
                 val sData = snaps.documents[0]
@@ -97,7 +110,7 @@ fun CourseDetailScreen(
             }
         }
 
-        // 2. Fetch Course Fee, Title, and DURATION from testList
+        // 2. Fetch Course Data
         db.collection("exams").document("testList").get().addOnSuccessListener { doc ->
             val testsArray = doc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             val matchedCourse = testsArray.find { it["sheetId"] == courseId }
@@ -108,7 +121,7 @@ fun CourseDetailScreen(
             }
         }
 
-        // 3. Listen to Real-Time Payment Status and Calculate Expiry
+        // 3. Listen to Payment Status
         if (uid != null) {
             db.collection("pending_registrations")
                 .whereEqualTo("uid", uid)
@@ -118,7 +131,6 @@ fun CourseDetailScreen(
                         val latestDoc = snap.documents.maxByOrNull { it.getTimestamp("createdAt")?.toDate()?.time ?: 0L }
                         paymentStatus = latestDoc?.getString("status")
                         
-                        // NEW: Calculate Expiry Date if Approved
                         if (paymentStatus == "approved") {
                             val createdAt = latestDoc?.getTimestamp("createdAt")?.toDate()
                             val savedDuration = (latestDoc?.get("durationMonths") as? Number)?.toInt() ?: courseDuration
@@ -128,6 +140,10 @@ fun CourseDetailScreen(
                                 calendar.time = createdAt
                                 calendar.add(Calendar.MONTH, savedDuration)
                                 subscriptionExpiry = calendar.time
+                                
+                                if (Date().after(subscriptionExpiry)) {
+                                    paymentStatus = "expired"
+                                }
                             }
                         }
                     } else {
@@ -137,7 +153,7 @@ fun CourseDetailScreen(
                 }
         }
 
-        // 4. Load the actual tests data for the content tab
+        // 4. Load the actual tests data & parse bookmarks!
         db.collection("pro_course_questions").document(courseId).get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
@@ -145,25 +161,54 @@ fun CourseDetailScreen(
                     val testsMap = data?.get("tests") as? Map<String, Any>
                     
                     val parsedTests = mutableListOf<TestSummary>()
+                    val parsedBookmarks = mutableListOf<BookmarkedQuestion>()
                     
                     testsMap?.forEach { (testName, testData) ->
                         var qCount = 0
-                        try {
-                            val sectionsMap = testData as? Map<String, List<Any>>
-                            sectionsMap?.forEach { (_, qList) ->
-                                qCount += qList.size
-                            }
-                        } catch (e: Exception) {
-                            // Fallback if structure varies
-                        }
+                        val specificTest = testData as? Map<String, List<Map<String, Any>>>
                         
-                        parsedTests.add(TestSummary(
-                            name = testName,
-                            questionCount = qCount,
-                            timeMinutes = qCount 
-                        ))
+                        // Parse Question Count for Overview
+                        try {
+                            specificTest?.forEach { (_, qList) -> qCount += qList.size }
+                        } catch (e: Exception) { }
+                        
+                        parsedTests.add(TestSummary(name = testName, questionCount = qCount, timeMinutes = qCount))
+
+                        // NEW: Parse Saved Bookmarks for this test
+                        val prefKey = "exam_state_${courseId}_${testName}"
+                        val savedBookmarksStr = examPrefs.getString("${prefKey}_bookmarks", "")
+                        
+                        if (!savedBookmarksStr.isNullOrBlank()) {
+                            val bookmarkPairs = savedBookmarksStr.split(";").mapNotNull { 
+                                val parts = it.split(",")
+                                if(parts.size == 2) parts[0].toInt() to parts[1].toInt() else null
+                            }
+                            
+                            if (bookmarkPairs.isNotEmpty() && specificTest != null) {
+                                val sectionEntries = specificTest.entries.toList()
+                                bookmarkPairs.forEach { (sIdx, qIdx) ->
+                                    if (sIdx < sectionEntries.size) {
+                                        val secName = sectionEntries[sIdx].key
+                                        val qList = sectionEntries[sIdx].value
+                                        if (qIdx < qList.size) {
+                                            val qMap = qList[qIdx]
+                                            parsedBookmarks.add(
+                                                BookmarkedQuestion(
+                                                    testName = testName,
+                                                    sectionName = secName,
+                                                    questionText = qMap["text"] as? String ?: "",
+                                                    options = qMap["options"] as? List<String> ?: emptyList(),
+                                                    correctOptionIndex = (qMap["correct"] as? Number)?.toInt() ?: 0
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     tests = parsedTests
+                    bookmarkedQuestions = parsedBookmarks // Load into state!
                 }
                 isLoading = false
             }
@@ -248,7 +293,8 @@ fun CourseDetailScreen(
                             Text(
                                 text = title, 
                                 color = if (selectedTab == index) ViewSeriesBlue else Color.Gray,
-                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 12.sp
                             ) 
                         }
                     )
@@ -256,7 +302,9 @@ fun CourseDetailScreen(
             }
 
             if (selectedTab == 0) {
+                // ==========================================
                 // OVERVIEW TAB
+                // ==========================================
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -295,7 +343,6 @@ fun CourseDetailScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     if (paymentStatus == "approved") {
-                        // NEW: Approved Banner showing the Expiry Date
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
@@ -326,7 +373,6 @@ fun CourseDetailScreen(
                             }
                         }
                     } else {
-                        // Pre-Purchase Duration Banner
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
@@ -358,14 +404,16 @@ fun CourseDetailScreen(
                     }
                 }
             } else {
-                // CONTENT TAB / PAYWALL
+                // ==========================================
+                // PAYWALL & PROTECTED TABS
+                // ==========================================
                 Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF9FAFB)), contentAlignment = Alignment.TopCenter) {
                     if (isLoading) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = ViewSeriesBlue)
                         }
                     } else if (paymentStatus != "approved") {
-                        // THE PAYWALL SCREEN
+                        // PAYWALL BLOCK
                         Column(
                             modifier = Modifier.fillMaxSize().padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -373,7 +421,13 @@ fun CourseDetailScreen(
                         ) {
                             Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size(64.dp), tint = Color.LightGray)
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text("Course Locked", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = DarkHeaderColor)
+                            
+                            Text(
+                                text = if (paymentStatus == "expired") "Subscription Expired" else "Course Locked", 
+                                fontSize = 24.sp, 
+                                fontWeight = FontWeight.Bold, 
+                                color = DarkHeaderColor
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
                             
                             if (paymentStatus == "pending") {
@@ -384,7 +438,9 @@ fun CourseDetailScreen(
                                 )
                             } else {
                                 Text(
-                                    text = "Unlock this course for $courseDuration Months to access all ${tests.size} premium mock tests.", 
+                                    text = if (paymentStatus == "expired") 
+                                        "Your access has ended. Renew your subscription for $courseDuration Months to regain access." 
+                                        else "Unlock this course for $courseDuration Months to access all ${tests.size} premium mock tests.", 
                                     color = Color.Gray, 
                                     textAlign = TextAlign.Center
                                 )
@@ -402,123 +458,218 @@ fun CourseDetailScreen(
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = if (courseFee > 0) "PAY ₹${courseFee.toInt()} FOR $courseDuration MONTHS" else "UNLOCK COURSE", 
+                                        text = if (courseFee > 0) {
+                                            if (paymentStatus == "expired") "RENEW FOR ₹${courseFee.toInt()}" else "PAY ₹${courseFee.toInt()} FOR $courseDuration MONTHS"
+                                        } else "UNLOCK COURSE", 
                                         fontWeight = FontWeight.Bold, 
                                         fontSize = 16.sp
                                     )
                                 }
                             }
                         }
-                    } else if (tests.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No tests found for this course.", color = Color.Gray)
-                        }
                     } else {
-                        // COURSE UNLOCKED: SHOW THE TESTS
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            
-                            // NEW: Top Expiry Banner in Content Tab
-                            if (subscriptionExpiry != null) {
-                                item {
-                                    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
-                                        border = BorderStroke(1.dp, Color(0xFF4CAF50)),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "Active Subscription: Valid until ${dateFormat.format(subscriptionExpiry!!)}",
-                                            color = Color(0xFF2E7D32),
-                                            fontWeight = FontWeight.Bold,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                            fontSize = 13.sp
-                                        )
+                        // SECURE CONTENT UNLOCKED
+                        if (selectedTab == 1) {
+                            // -----------------------------
+                            // CONTENT TAB (Mock Tests List)
+                            // -----------------------------
+                            if (tests.isEmpty()) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("No tests found for this course.", color = Color.Gray)
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    if (subscriptionExpiry != null) {
+                                        item {
+                                            val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                                                border = BorderStroke(1.dp, Color(0xFF4CAF50)),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Active Subscription: Valid until ${dateFormat.format(subscriptionExpiry!!)}",
+                                                    color = Color(0xFF2E7D32),
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    items(tests) { test ->
+                                        val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
+                                        val testScore = localStorage.getTestScore(courseId, test.name)
+                                        
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                Text(
+                                                    text = test.name, 
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = DarkHeaderColor
+                                                )
+                                                
+                                                Spacer(modifier = Modifier.height(12.dp))
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Default.List, contentDescription = "Questions", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                                                    }
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Default.DateRange, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                Divider(color = Color(0xFFF3F4F6))
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                
+                                                if (alreadyAttempted && testScore != null) {
+                                                    val formatScore = { value: Float -> 
+                                                        if (value % 1.0f == 0f) value.toInt().toString() else value.toString() 
+                                                    }
+                                                    
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Column {
+                                                            Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                                            Text(
+                                                                text = "${formatScore(testScore.first)} / ${formatScore(testScore.second)}", 
+                                                                color = Color(0xFF27AE60),
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontSize = 18.sp
+                                                            )
+                                                        }
+                                                        OutlinedButton(
+                                                            onClick = { onNavigateToExam(courseId, test.name, true) },
+                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ViewSeriesBlue),
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        ) {
+                                                            Text("Review Test", fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                } else {
+                                                    Button(
+                                                        onClick = { onNavigateToExam(courseId, test.name, false) },
+                                                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
+                                                    ) {
+                                                        Text("Take Test", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
-
-                            items(tests) { test ->
-                                val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
-                                val testScore = localStorage.getTestScore(courseId, test.name)
-                                
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                                    shape = RoundedCornerShape(12.dp)
+                        } else if (selectedTab == 2) {
+                            // -----------------------------
+                            // SAVED TAB (Bookmarked Doubts)
+                            // -----------------------------
+                            if (bookmarkedQuestions.isEmpty()) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
                                 ) {
-                                    Column(modifier = Modifier.padding(16.dp)) {
+                                    Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text("No Saved Doubts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.DarkGray)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "When taking a mock test, tap the ⭐ icon next to difficult questions to save them here for quick revision!",
+                                        textAlign = TextAlign.Center, color = Color.Gray, fontSize = 14.sp
+                                    )
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    item {
                                         Text(
-                                            text = test.name, 
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = DarkHeaderColor
+                                            text = "Review your saved questions. The correct answers are highlighted in green.",
+                                            fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)
                                         )
-                                        
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                        
-                                        Row(
+                                    }
+                                    items(bookmarkedQuestions) { bq ->
+                                        Card(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                                            elevation = CardDefaults.cardElevation(2.dp),
+                                            shape = RoundedCornerShape(12.dp)
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.List, contentDescription = "Questions", modifier = Modifier.size(16.dp), tint = Color.Gray)
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
-                                            }
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.DateRange, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Divider(color = Color(0xFFF3F4F6))
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        
-                                        if (alreadyAttempted && testScore != null) {
-                                            val formatScore = { value: Float -> 
-                                                if (value % 1.0f == 0f) value.toInt().toString() else value.toString() 
-                                            }
-                                            
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column {
-                                                    Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-                                                    Text(
-                                                        text = "${formatScore(testScore.first)} / ${formatScore(testScore.second)}", 
-                                                        color = Color(0xFF27AE60),
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 18.sp
-                                                    )
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                // Header: Star + Test Name
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(Icons.Default.Star, contentDescription = "Saved", tint = Color(0xFFFFC107), modifier = Modifier.size(18.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("${bq.testName} • ${bq.sectionName}", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                                                 }
-                                                OutlinedButton(
-                                                    onClick = { onNavigateToExam(courseId, test.name, true) },
-                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ViewSeriesBlue),
-                                                    shape = RoundedCornerShape(8.dp)
-                                                ) {
-                                                    Text("Review Test", fontWeight = FontWeight.Bold)
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                
+                                                // Question Text
+                                                Box(modifier = Modifier.fillMaxWidth()) {
+                                                    MathText(text = bq.questionText, fontSizePx = 16)
+                                                    Box(modifier = Modifier.matchParentSize().background(Color.Transparent)) // Prevents webview hijacking clicks
                                                 }
-                                            }
-                                        } else {
-                                            Button(
-                                                onClick = { onNavigateToExam(courseId, test.name, false) },
-                                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                                shape = RoundedCornerShape(8.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
-                                            ) {
-                                                Text("Take Test", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                
+                                                // Options List
+                                                bq.options.forEachIndexed { index, opt ->
+                                                    val isCorrect = index == bq.correctOptionIndex
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(vertical = 4.dp)
+                                                            .background(if (isCorrect) Color(0xFFF0FDF4) else Color(0xFFF9FAFB), RoundedCornerShape(8.dp))
+                                                            .border(1.dp, if (isCorrect) Color(0xFF4CAF50) else Color.Transparent, RoundedCornerShape(8.dp))
+                                                            .padding(12.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        if (isCorrect) {
+                                                            Icon(Icons.Default.CheckCircle, contentDescription = "Correct", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                        } else {
+                                                            Spacer(modifier = Modifier.width(26.dp)) // Aligns wrong options cleanly
+                                                        }
+                                                        
+                                                        Box(modifier = Modifier.weight(1f)) {
+                                                            MathText(
+                                                                text = opt, 
+                                                                fontSizePx = 14, 
+                                                                textColorHex = if (isCorrect) "#166534" else "#333333"
+                                                            )
+                                                            Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -556,7 +707,6 @@ fun PaymentDialog(
     val apps = listOf("PhonePe", "Google Pay (GPay)", "Paytm", "Other")
     val context = LocalContext.current
     
-    // Generate Dynamic QR URL
     val qrUrl = remember(upiId, staticQrUrl, courseFee) {
         if (upiId.isNotBlank()) {
             val upiString = "upi://pay?pa=$upiId&pn=${URLEncoder.encode(merchantName, "UTF-8")}&am=${courseFee}&cu=INR"
@@ -636,7 +786,6 @@ fun PaymentDialog(
                     fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                // ACTUAL QR CODE
                 Box(
                     modifier = Modifier
                         .size(160.dp)
@@ -646,19 +795,12 @@ fun PaymentDialog(
                 ) {
                     if (qrUrl.isNotBlank()) {
                         AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(qrUrl)
-                                .crossfade(true)
-                                .build(),
+                            model = ImageRequest.Builder(LocalContext.current).data(qrUrl).crossfade(true).build(),
                             contentDescription = "UPI QR Code",
                             modifier = Modifier.padding(8.dp).fillMaxSize()
                         )
                     } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = ViewSeriesBlue, modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Loading QR...", fontSize = 12.sp, color = Color.Gray)
-                        }
+                        CircularProgressIndicator(color = ViewSeriesBlue, modifier = Modifier.size(24.dp))
                     }
                 }
                 
@@ -698,7 +840,6 @@ fun PaymentDialog(
                     }
                 }
 
-                // SHOW UTR INPUT IF "PAY NOW" WAS CLICKED OR PREVIOUSLY REJECTED
                 if (hasClickedPay || selectedApp.isNotBlank()) {
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
