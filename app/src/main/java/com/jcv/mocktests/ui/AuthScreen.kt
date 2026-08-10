@@ -22,7 +22,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.jcv.mocktests.R
 
 // Matching the "View Series" blue from the image
-val ViewSeriesBlue = Color(0xFF2962FF)
+private val ViewSeriesBlue = Color(0xFF2962FF)
 
 @Composable
 fun AuthScreen(
