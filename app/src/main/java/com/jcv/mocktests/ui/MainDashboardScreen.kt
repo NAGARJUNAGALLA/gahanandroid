@@ -38,7 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions // NEW IMPORT
 import com.jcv.mocktests.R
+import com.jcv.mocktests.utils.LocalStorage // NEW IMPORT
 import kotlinx.coroutines.launch
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES }
@@ -92,6 +94,8 @@ fun MainDashboardScreen(
 
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
+    val localStorage = remember { LocalStorage(context) }
+    val localDeviceId = remember { localStorage.getOrCreateDeviceId() }
     
     val auth = FirebaseAuth.getInstance()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -103,6 +107,39 @@ fun MainDashboardScreen(
     
     var approvedSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    
+    // NEW: Streak Counter State
+    var streakCount by remember { mutableIntStateOf(0) }
+
+    // NEW: SINGLE-DEVICE ENFORCEMENT & STREAK LISTENER
+    LaunchedEffect(auth.currentUser?.uid) {
+        val uid = auth.currentUser?.uid
+        if (uid != null) {
+            val db = FirebaseFirestore.getInstance()
+            db.collection("users").document(uid).addSnapshotListener { snap, _ ->
+                if (snap != null && snap.exists()) {
+                    val dbDeviceId = snap.getString("deviceId") ?: ""
+                    
+                    // If the database device ID does not match this phone, they logged in elsewhere!
+                    if (dbDeviceId.isNotEmpty() && dbDeviceId != localDeviceId) {
+                        auth.signOut()
+                        Toast.makeText(context, "Logged out: Your account was accessed from another device.", Toast.LENGTH_LONG).show()
+                        onNavigateToLogin()
+                    }
+                    
+                    // Fetch Streak Count
+                    streakCount = (snap.getLong("streakCount") ?: 0).toInt()
+                } else {
+                    // First time login, save this device ID and initialize streak
+                    val initialData = mapOf(
+                        "deviceId" to localDeviceId,
+                        "streakCount" to 0
+                    )
+                    db.collection("users").document(uid).set(initialData, SetOptions.merge())
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         val db = FirebaseFirestore.getInstance()
@@ -270,6 +307,18 @@ fun MainDashboardScreen(
                         }
                     },
                     actions = {
+                        // NEW: STREAK COUNTER DISPLAY
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("🔥", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+
                         IconButton(onClick = onToggleTheme) {
                             Icon(
                                 imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
@@ -633,7 +682,6 @@ fun CourseCardView(
     val originalPrice = course.fee * 5 // Auto-calculates 80% OFF original price
     val goldColor = Color(0xFFFFD700)
     
-    // Background Gradient (Dark Red to Black)
     val bannerGradient = Brush.verticalGradient(
         colors = listOf(Color(0xFF3B0000), Color(0xFF050000))
     )
@@ -653,13 +701,10 @@ fun CourseCardView(
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // ==========================================
-            // LEFT SIDE: VIBRANT 2D PROMO THUMBNAIL
-            // ==========================================
             Box(
                 modifier = Modifier
                     .width(140.dp)
-                    .height(95.dp) // Adjusted for content height
+                    .height(95.dp) 
                     .background(bannerGradient, RoundedCornerShape(8.dp))
                     .border(1.dp, goldColor.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                     .padding(6.dp)
@@ -669,7 +714,6 @@ fun CourseCardView(
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Top Row: Logo & Category Ribbon
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -696,7 +740,6 @@ fun CourseCardView(
                         }
                     }
 
-                    // Center Row: Golden Course Title
                     Text(
                         text = course.title.uppercase(),
                         color = goldColor,
@@ -708,10 +751,9 @@ fun CourseCardView(
                         lineHeight = 13.sp
                     )
 
-                    // Bottom Row: Validity Tag
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF1E3A8A), RoundedCornerShape(2.dp)) // Dark Blue
+                            .background(Color(0xFF1E3A8A), RoundedCornerShape(2.dp)) 
                             .border(0.5.dp, Color(0xFF60A5FA), RoundedCornerShape(2.dp))
                             .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
@@ -727,12 +769,8 @@ fun CourseCardView(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // ==========================================
-            // RIGHT SIDE: TEXT DETAILS & PRICING
-            // ==========================================
             Column(modifier = Modifier.weight(1f)) {
                 
-                // RIGHT ROW 1: Tags & Lock/Unlock Status
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -750,7 +788,6 @@ fun CourseCardView(
                     }
                 }
 
-                // RIGHT ROW 2: Main Course Title
                 Text(
                     text = course.title,
                     fontSize = 13.sp,
@@ -762,7 +799,6 @@ fun CourseCardView(
                     lineHeight = 18.sp
                 )
 
-                // RIGHT ROW 3: Pricing Data (80% Off)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = "₹${course.fee.toInt()}",
@@ -786,7 +822,7 @@ fun CourseCardView(
                     Text(
                         text = "80% OFF",
                         fontSize = 11.sp,
-                        color = Color(0xFFE07A5F), // Coral/Red tint
+                        color = Color(0xFFE07A5F),
                         fontWeight = FontWeight.ExtraBold,
                         modifier = Modifier.padding(bottom = 1.dp)
                     )
@@ -798,7 +834,6 @@ fun CourseCardView(
     }
 }
 
-// Helper Composable for the small gray tag chips
 @Composable
 fun CourseTag(text: String) {
     Box(
