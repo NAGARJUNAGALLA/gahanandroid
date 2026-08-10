@@ -72,4 +72,5 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-messaging")
     implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.compose.material:material-icons-extended:1.5.0") 
 }
