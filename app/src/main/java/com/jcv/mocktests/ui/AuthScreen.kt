@@ -2,6 +2,7 @@ package com.jcv.mocktests.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,8 +19,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.UserProfileChangeRequest
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
@@ -28,173 +27,229 @@ import com.jcv.mocktests.utils.LocalStorage
 private val ViewSeriesBlue = Color(0xFF2962FF)
 
 @Composable
-fun SignupScreen(
+fun AuthScreen(
     onNavigateToHome: () -> Unit,
-    onNavigateToLogin: () -> Unit
+    onNavigateToSignup: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var mobile by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") } 
     var password by remember { mutableStateOf("") }
-    
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     
-    // NEW: State for the Verification Popup
-    var showVerificationDialog by remember { mutableStateOf(false) }
+    // States for Verification & Resend
+    var needsVerification by remember { mutableStateOf(false) }
+    var isResending by remember { mutableStateOf(false) }
+
+    // States for Forgot Password Dialog
+    var showResetDialog by remember { mutableStateOf(false) }
+    var resetEmail by remember { mutableStateOf("") }
+    var isSendingReset by remember { mutableStateOf(false) }
 
     val auth = remember { FirebaseAuth.getInstance() }
     val context = LocalContext.current
 
     // ==========================================
-    // VERIFICATION INSTRUCTIONS DIALOG
+    // FORGOT PASSWORD DIALOG
     // ==========================================
-    if (showVerificationDialog) {
+    if (showResetDialog) {
         AlertDialog(
-            onDismissRequest = { /* Force them to click OK */ },
+            onDismissRequest = { if (!isSendingReset) showResetDialog = false },
             containerColor = Color.White,
             title = {
-                Text("Verify Your Email", fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
+                Text("Reset Password", fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
             },
             text = {
-                Text(
-                    text = "Your account has been created! We have sent a verification link to $email.\n\nPlease check your inbox (and spam folder) and click the link to activate your account before logging in.",
-                    color = Color.DarkGray,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp
-                )
+                Column {
+                    Text("Enter your email address and we'll send you a link to reset your password.", fontSize = 14.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = { resetEmail = it },
+                        label = { Text("Email Address") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
+                    )
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        showVerificationDialog = false
-                        onNavigateToLogin() // Send them to login screen
+                        if (resetEmail.isBlank()) {
+                            Toast.makeText(context, "Please enter your email", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isSendingReset = true
+                        auth.sendPasswordResetEmail(resetEmail.trim())
+                            .addOnCompleteListener { task ->
+                                isSendingReset = false
+                                if (task.isSuccessful) {
+                                    Toast.makeText(context, "Password reset link sent to your email!", Toast.LENGTH_LONG).show()
+                                    showResetDialog = false
+                                } else {
+                                    Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
                     },
+                    enabled = !isSendingReset,
                     colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
                 ) {
-                    Text("Go to Login", color = Color.White, fontWeight = FontWeight.Bold)
+                    if (isSendingReset) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                    else Text("Send Link")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showResetDialog = false },
+                    enabled = !isSendingReset
+                ) {
+                    Text("Cancel", color = Color.Gray)
                 }
             }
         )
     }
 
+    // ==========================================
+    // MAIN LOGIN UI
+    // ==========================================
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        
         Image(
             painter = painterResource(id = R.drawable.logo),
             contentDescription = "App Logo",
-            modifier = Modifier.size(100.dp).padding(bottom = 16.dp)
+            modifier = Modifier.size(120.dp).padding(bottom = 16.dp)
         )
 
-        Text("Create an Account", style = MaterialTheme.typography.headlineMedium, color = ViewSeriesBlue, fontWeight = FontWeight.Bold)
+        Text("JCV MOCK TESTS", style = MaterialTheme.typography.headlineLarge, color = ViewSeriesBlue, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Welcome back! Please login.", color = Color.Gray, fontSize = 14.sp)
         Spacer(modifier = Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Full Name") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email Address") },
+            label = { Text("Email Address") }, 
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = mobile,
-            onValueChange = { mobile = it },
-            label = { Text("Mobile Number") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
         )
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password (Min 6 characters)") },
+            label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
         )
+        
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Text(
+                text = "Forgot Password?",
+                color = ViewSeriesBlue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .clickable { 
+                        resetEmail = email 
+                        showResetDialog = true 
+                    }
+                    .padding(4.dp)
+            )
+        }
+        
         Spacer(modifier = Modifier.height(24.dp))
 
         if (errorMessage != null) {
-            Text(errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+            Text(errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp, textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // Resend Verification Button if they are blocked
+        if (needsVerification) {
+            OutlinedButton(
+                onClick = {
+                    isResending = true
+                    auth.currentUser?.sendEmailVerification()?.addOnCompleteListener { task ->
+                        isResending = false
+                        if (task.isSuccessful) {
+                            Toast.makeText(context, "Verification email resent! Check your inbox.", Toast.LENGTH_LONG).show()
+                            auth.signOut()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF57C00))
+            ) {
+                if (isResending) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFFF57C00), strokeWidth = 2.dp)
+                else Text("Resend Verification Link", fontWeight = FontWeight.Bold)
+            }
         }
 
         Button(
             onClick = {
-                if (name.isBlank() || email.isBlank() || password.isBlank() || mobile.isBlank()) {
-                    errorMessage = "Please fill all fields"
+                if (email.isBlank() || password.isBlank()) {
+                    errorMessage = "Please enter both email and password"
                     return@Button
                 }
-                
+
                 isLoading = true
-                auth.createUserWithEmailAndPassword(email.trim(), password)
+                needsVerification = false
+                errorMessage = null
+                
+                auth.signInWithEmailAndPassword(email.trim(), password)
                     .addOnCompleteListener { task ->
                         if (task.isSuccessful) {
                             val user = auth.currentUser
-                            if (user != null) {
-                                // 1. Update Firebase Auth Profile with their Name
-                                val profileUpdates = UserProfileChangeRequest.Builder().setDisplayName(name.trim()).build()
-                                user.updateProfile(profileUpdates)
-
-                                // 2. Save User details to Firestore
+                            
+                            // STRICT EMAIL VERIFICATION CHECK
+                            if (user != null && user.isEmailVerified) {
+                                // They are verified! Proceed with Single Device Enforcement
                                 val deviceId = LocalStorage(context).getOrCreateDeviceId()
-                                val userData = hashMapOf(
-                                    "name" to name.trim(),
-                                    "email" to email.trim(),
-                                    "mobile" to mobile.trim(),
-                                    "deviceId" to deviceId,
-                                    "streakCount" to 0,
-                                    "role" to "student",
-                                    "createdAt" to FieldValue.serverTimestamp()
-                                )
-
                                 FirebaseFirestore.getInstance().collection("users").document(user.uid)
-                                    .set(userData, SetOptions.merge())
+                                    .set(mapOf("deviceId" to deviceId), SetOptions.merge())
                                     .addOnSuccessListener {
-                                        // 3. Send Verification Email & Show Popup
-                                        user.sendEmailVerification().addOnCompleteListener {
-                                            auth.signOut() // Immediately sign them out so they can't bypass verification
-                                            isLoading = false
-                                            showVerificationDialog = true 
-                                        }
+                                        isLoading = false
+                                        Toast.makeText(context, "Login Successful", Toast.LENGTH_SHORT).show()
+                                        onNavigateToHome()
                                     }
+                            } else {
+                                // Blocked! They haven't verified their email
+                                isLoading = false
+                                needsVerification = true
+                                errorMessage = "Your email is not verified. Please check your inbox and spam folder, then try again."
                             }
                         } else {
                             isLoading = false
-                            errorMessage = task.exception?.message ?: "Signup Failed"
+                            errorMessage = task.exception?.message ?: "Login Failed"
                         }
                     }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             enabled = !isLoading,
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(8.dp), 
             colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
         ) {
-            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-            else Text("Sign Up", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+            } else {
+                Text("Log In", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
         }
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        TextButton(onClick = onNavigateToLogin) {
-            Text("Already have an account? Log In", color = ViewSeriesBlue)
+        TextButton(onClick = onNavigateToSignup) {
+            Text("Don't have an account? Sign Up", color = ViewSeriesBlue)
         }
     }
 }
