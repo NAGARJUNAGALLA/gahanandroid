@@ -3,6 +3,7 @@ package com.jcv.mocktests.ui
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +40,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.R
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.BorderStroke
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES }
 
@@ -621,7 +622,7 @@ fun CourseGridScreen(
 }
 
 // ---------------------------------------------------------------------------
-// NEW: VIBRANT 2D "PROMOTIONAL BANNER" COURSE CARD
+// HYBRID CARD VIEW: Vibrant Banner on Left, Text Details on Right
 // ---------------------------------------------------------------------------
 @Composable
 fun CourseCardView(
@@ -629,163 +630,187 @@ fun CourseCardView(
     isUnlocked: Boolean, 
     onClick: () -> Unit
 ) {
+    val originalPrice = course.fee * 5 // Auto-calculates 80% OFF original price
     val goldColor = Color(0xFFFFD700)
-    val darkBlueBg = Color(0xFF0F172A)
     
     // Background Gradient (Dark Red to Black)
     val bannerGradient = Brush.verticalGradient(
         colors = listOf(Color(0xFF3B0000), Color(0xFF050000))
     )
-
-    // Red Ribbon Gradient
     val ribbonGradient = Brush.horizontalGradient(
         colors = listOf(Color(0xFF8B0000), Color(0xFFD32F2F), Color(0xFF8B0000))
     )
-
-    Card(
+    
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.5.dp, goldColor.copy(alpha = 0.6f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            .clickable { onClick() }
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(bannerGradient)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                
-                // ----------------------------------------------------
-                // ROW 1: Logo & Category Banner
-                // ----------------------------------------------------
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+            // ==========================================
+            // LEFT SIDE: VIBRANT 2D PROMO THUMBNAIL
+            // ==========================================
+            Box(
+                modifier = Modifier
+                    .width(140.dp)
+                    .height(95.dp) // Adjusted for content height
+                    .background(bannerGradient, RoundedCornerShape(8.dp))
+                    .border(1.dp, goldColor.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                    .padding(6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Top Row: Logo & Category Ribbon
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Image(
                             painter = painterResource(id = R.drawable.logo),
                             contentDescription = "Logo",
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color.White)
-                                .border(1.5.dp, goldColor, CircleShape)
+                            modifier = Modifier.size(18.dp).clip(CircleShape).background(Color.White)
                         )
                         
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        // Red Ribbon Category Tag
                         Box(
                             modifier = Modifier
-                                .background(ribbonGradient, RoundedCornerShape(4.dp))
-                                .border(0.5.dp, goldColor, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .background(ribbonGradient, RoundedCornerShape(2.dp))
+                                .border(0.5.dp, goldColor, RoundedCornerShape(2.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = if (course.fee > 0) "PRO COURSE" else "FREE COURSE",
+                                text = if (course.fee > 0) "PRO" else "FREE",
                                 color = Color.White,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                                fontSize = 7.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    if (isUnlocked) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Unlocked",
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(24.dp).background(Color.White, CircleShape)
+                    // Center Row: Golden Course Title
+                    Text(
+                        text = course.title.uppercase(),
+                        color = goldColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 13.sp
+                    )
+
+                    // Bottom Row: Validity Tag
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF1E3A8A), RoundedCornerShape(2.dp)) // Dark Blue
+                            .border(0.5.dp, Color(0xFF60A5FA), RoundedCornerShape(2.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "${course.durationMonths} MONTHS",
+                            color = Color.White,
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.Bold
                         )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "Locked",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // ----------------------------------------------------
-                // ROW 2: Main Bold Title
-                // ----------------------------------------------------
-                Text(
-                    text = course.title.uppercase(),
-                    color = goldColor,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Black,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 28.sp
-                )
-                
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                // ----------------------------------------------------
-                // ROW 3: Bottom Badges (Topic / Validity / Fee)
-                // ----------------------------------------------------
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Badge 1: Quick Revision (Dark Red)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(55.dp)
-                            .background(Color(0xFF5C0000), RoundedCornerShape(8.dp))
-                            .border(1.dp, goldColor, RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("QUICK", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                            Text("REVISION", color = goldColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    // Badge 2: Validity (Dark Blue)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(55.dp)
-                            .background(darkBlueBg, RoundedCornerShape(8.dp))
-                            .border(1.dp, goldColor, RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("${course.durationMonths} MONTHS", color = goldColor, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                            Text("VALIDITY", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    // Badge 3: Fee (Dark Blue)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(55.dp)
-                            .background(darkBlueBg, RoundedCornerShape(8.dp))
-                            .border(1.dp, goldColor, RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("₹${course.fee.toInt()}/-", color = goldColor, fontSize = 20.sp, fontWeight = FontWeight.Black)
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // ==========================================
+            // RIGHT SIDE: TEXT DETAILS & PRICING
+            // ==========================================
+            Column(modifier = Modifier.weight(1f)) {
+                
+                // RIGHT ROW 1: Tags & Lock/Unlock Status
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        CourseTag("TESTS")
+                        CourseTag("VIDEOS")
+                    }
+                    
+                    if (isUnlocked) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = "Unlocked", tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                    } else {
+                        Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                    }
+                }
+
+                // RIGHT ROW 2: Main Course Title
+                Text(
+                    text = course.title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    lineHeight = 18.sp
+                )
+
+                // RIGHT ROW 3: Pricing Data (80% Off)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "₹${course.fee.toInt()}",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    Spacer(modifier = Modifier.width(6.dp))
+                    
+                    Text(
+                        text = "₹${originalPrice.toInt()}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF94A3B8),
+                        textDecoration = TextDecoration.LineThrough,
+                        modifier = Modifier.padding(bottom = 1.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = "80% OFF",
+                        fontSize = 11.sp,
+                        color = Color(0xFFE07A5F), // Coral/Red tint
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(bottom = 1.dp)
+                    )
+                }
+            }
         }
+        
+        Divider(color = Color.LightGray.copy(alpha = 0.2f), thickness = 1.dp)
+    }
+}
+
+// Helper Composable for the small gray tag chips
+@Composable
+fun CourseTag(text: String) {
+    Box(
+        modifier = Modifier
+            .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 9.sp,
+            color = Color.Gray,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
