@@ -19,7 +19,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
+import com.jcv.mocktests.utils.LocalStorage
 
 // Matching the "View Series" blue from the image
 private val ViewSeriesBlue = Color(0xFF2962FF)
@@ -198,6 +201,18 @@ fun AuthScreen(
                     .addOnCompleteListener { task ->
                         isLoading = false
                         if (task.isSuccessful) {
+                            
+                            // ==================================================
+                            // NEW: SINGLE DEVICE LOGIN ENFORCEMENT
+                            // ==================================================
+                            val uid = auth.currentUser?.uid
+                            if (uid != null) {
+                                val deviceId = LocalStorage(context).getOrCreateDeviceId()
+                                FirebaseFirestore.getInstance().collection("users").document(uid)
+                                    .set(mapOf("deviceId" to deviceId), SetOptions.merge())
+                            }
+                            // ==================================================
+                            
                             // CREDENTIALS ARE VALID -> TRIGGER THE AUTH DIALOG
                             showAuthDialog = true
                         } else {
