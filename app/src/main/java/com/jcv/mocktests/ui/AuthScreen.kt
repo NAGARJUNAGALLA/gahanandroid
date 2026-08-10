@@ -23,6 +23,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
+import androidx.compose.ui.text.style.TextAlign
 
 private val ViewSeriesBlue = Color(0xFF2962FF)
 
