@@ -24,10 +24,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -55,11 +59,13 @@ private val PastelColors = listOf(
     Color(0xFFE0F7FA)  
 )
 
+// UPDATED: Added durationMonths to cache and pass validity
 data class CourseModel(
     val sheetId: String,
     val title: String,
     val fee: Double,
-    val topic: String
+    val topic: String,
+    val durationMonths: Int = 1 
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,8 +118,10 @@ fun MainDashboardScreen(
         if (cachedCoursesStr.isNotEmpty()) {
             val parsedCourses = cachedCoursesStr.split("|||").mapNotNull {
                 val parts = it.split("|")
-                if (parts.size >= 4) {
-                    CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3])
+                if (parts.size >= 5) {
+                    CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3], parts[4].toIntOrNull() ?: 1)
+                } else if (parts.size == 4) {
+                    CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3], 1)
                 } else null
             }
             approvedSheetIds = cachedPurchasedStr.split(",").filter { it.isNotBlank() }
@@ -135,11 +143,12 @@ fun MainDashboardScreen(
                 val fee = feeString.toDoubleOrNull() ?: 0.0
                 val sheetId = map["sheetId"] as? String ?: ""
                 val topic = "OTHERS"
-                CourseModel(sheetId, title, fee, topic)
+                val duration = (map["durationMonths"] as? Number)?.toInt() ?: 1 // Fetch Duration!
+                
+                CourseModel(sheetId, title, fee, topic, duration)
             }
 
             if (uid != null) {
-                // Fetch approved registrations to determine purchased courses
                 db.collection("pending_registrations").whereEqualTo("uid", uid).whereEqualTo("status", "approved").get().addOnSuccessListener { paySnap ->
                     approvedSheetIds = paySnap.documents.mapNotNull { it.getString("sheetId") }
                     
@@ -148,7 +157,7 @@ fun MainDashboardScreen(
                     proCourses = fetchedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
                     isLoading = false
                     
-                    val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}" }
+                    val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}|${it.durationMonths}" }
                     prefs.edit()
                         .putString("cached_courses", coursesString)
                         .putString("cached_purchased", approvedSheetIds.joinToString(","))
@@ -159,7 +168,7 @@ fun MainDashboardScreen(
                 proCourses = fetchedCourses.filter { it.fee > 0.0 }
                 isLoading = false
                 
-                val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}" }
+                val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}|${it.durationMonths}" }
                 prefs.edit()
                     .putString("cached_courses", coursesString)
                     .putString("cached_purchased", "")
@@ -428,7 +437,6 @@ fun DashboardHomeContent(
                     .basicMarquee()
             )
 
-            // Keeping the main categories as a visually appealing Grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -493,7 +501,6 @@ fun DashboardHomeContent(
                     Text("No courses found in this category.", color = Color.Gray)
                 }
             } else {
-                // Changed from Grid to List for the horizontal card design
                 LazyColumn(
                     modifier = Modifier.fillMaxSize()
                 ) {
@@ -604,7 +611,6 @@ fun CourseGridScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
         
-        // Changed from Grid to List for the horizontal card design
         LazyColumn(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -619,7 +625,7 @@ fun CourseGridScreen(
 }
 
 // ---------------------------------------------------------------------------
-// NEW HORIZONTAL LIST CARD VIEW (Matches User Screenshot)
+// NEW: DYNAMIC COLORFUL THUMBNAIL CARD
 // ---------------------------------------------------------------------------
 @Composable
 fun CourseCardView(
@@ -627,8 +633,15 @@ fun CourseCardView(
     isUnlocked: Boolean, 
     onClick: () -> Unit
 ) {
-    // 80% Discount Math: If the fee is 20% of the total price, Original Price = Fee * 5
-    val originalPrice = course.fee * 5
+    val originalPrice = course.fee * 5 // Auto-calculates 80% OFF original price
+    
+    // Custom Gradients to match the fiery/gold promotional style
+    val bgGradient = Brush.linearGradient(
+        colors = listOf(Color(0xFF3B0000), Color(0xFF0A0000)) // Deep red to black
+    )
+    val goldGradient = Brush.linearGradient(
+        colors = listOf(Color(0xFFFFD700), Color(0xFFF59E0B)) // Gold to Orange
+    )
     
     Column(
         modifier = Modifier
@@ -642,29 +655,96 @@ fun CourseCardView(
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // LEFT SIDE: THUMBNAIL PLACEHOLDER
+            // LEFT SIDE: COLORFUL DYNAMIC THUMBNAIL
             Box(
                 modifier = Modifier
-                    .width(130.dp)
-                    .height(85.dp)
-                    .background(Color(0xFF0F172A), RoundedCornerShape(8.dp)) // Dark Slate Background
-                    .border(1.dp, Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
+                    .width(135.dp)
+                    .height(90.dp)
+                    .background(bgGradient, RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f), RoundedCornerShape(8.dp)) // Gold Border
+                    .padding(6.dp)
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow, 
-                        contentDescription = "Play", 
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // THUMBNAIL ROW 1: Logo & Pro Badge
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.logo),
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(18.dp).clip(CircleShape).background(Color.White)
+                        )
+                        
+                        Box(
+                            modifier = Modifier
+                                .background(goldGradient, RoundedCornerShape(3.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (course.fee > 0) "PRO" else "FREE",
+                                color = Color.Black,
+                                fontSize = 7.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+
+                    // THUMBNAIL ROW 2: Vibrant Course Title
                     Text(
-                        text = "JCV MOCK TESTS", 
-                        color = Color.White, 
-                        fontSize = 10.sp, 
-                        fontWeight = FontWeight.Black
+                        text = course.title.uppercase(),
+                        color = Color(0xFFFFD700), // Bright Gold text
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = TextStyle(
+                            shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)
+                        )
                     )
+
+                    // THUMBNAIL ROW 3: Validity & Fee Box
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        // Validity Tag (Dark Blue)
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF1E3A8A), RoundedCornerShape(3.dp))
+                                .border(0.5.dp, Color(0xFF60A5FA), RoundedCornerShape(3.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "${course.durationMonths} Months",
+                                color = Color.White,
+                                fontSize = 7.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        // Fee Tag (Red)
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF991B1B), RoundedCornerShape(3.dp))
+                                .border(0.5.dp, Color(0xFFF87171), RoundedCornerShape(3.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "₹${course.fee.toInt()}",
+                                color = Color.White,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
                 }
             }
 
@@ -673,7 +753,7 @@ fun CourseCardView(
             // RIGHT SIDE: COURSE DETAILS & PRICING
             Column(modifier = Modifier.weight(1f)) {
                 
-                // ROW 1: Tags & Lock/Unlock Status
+                // RIGHT ROW 1: Tags & Lock/Unlock Status
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -692,7 +772,7 @@ fun CourseCardView(
                     }
                 }
 
-                // ROW 2: Course Title
+                // RIGHT ROW 2: Main Course Title
                 Text(
                     text = course.title,
                     fontSize = 14.sp,
@@ -704,7 +784,7 @@ fun CourseCardView(
                     lineHeight = 18.sp
                 )
 
-                // ROW 3: Pricing Data
+                // RIGHT ROW 3: Pricing Data (80% Off)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "₹${course.fee.toInt()}",
@@ -734,12 +814,10 @@ fun CourseCardView(
             }
         }
         
-        // Thin gray line separating list items
         Divider(color = Color.LightGray.copy(alpha = 0.3f), thickness = 1.dp)
     }
 }
 
-// Helper Composable for the small gray tag chips
 @Composable
 fun CourseTag(text: String) {
     Box(
