@@ -38,15 +38,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions // NEW IMPORT
+import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
-import com.jcv.mocktests.utils.LocalStorage // NEW IMPORT
+import com.jcv.mocktests.utils.LocalStorage
 import kotlinx.coroutines.launch
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES }
 
 private val ThemeBlue = Color(0xFF1976D2)
-private val LightGreyBg = Color(0xFFF5F6FA)
 private val RedBadgeColor = Color(0xFFE53935)
 
 private val PastelColors = listOf(
@@ -76,314 +75,334 @@ fun MainDashboardScreen(
     onNavigateToCourse: (String) -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
-    var selectedTab by remember(initialTab) {
-        mutableStateOf(
-            when (initialTab) {
-                "pro_courses" -> BottomTab.PRO_COURSES
-                "purchased_courses" -> BottomTab.PURCHASED_COURSES
-                else -> BottomTab.HOME
-            }
-        )
-    }
+    // ==========================================
+    // 1. DYNAMIC THEME DEFINITIONS
+    // ==========================================
+    val darkColors = darkColorScheme(
+        background = Color(0xFF0F172A),       // Deep Dark Blue/Gray for App Background
+        surface = Color(0xFF1E293B),          // Slightly lighter for Cards
+        onBackground = Color(0xFFF8FAFC),     // White text for Titles
+        onSurface = Color(0xFFF8FAFC),        // White text for Cards
+        surfaceVariant = Color(0xFF334155),   // For Tags and Dividers
+        onSurfaceVariant = Color(0xFF94A3B8)  // Gray Sub-text
+    )
     
-    LaunchedEffect(selectedTab) {
-        com.jcv.mocktests.utils.AnalyticsHelper.logEvent(com.google.firebase.analytics.FirebaseAnalytics.Event.SCREEN_VIEW) {
-            putString(com.google.firebase.analytics.FirebaseAnalytics.Param.SCREEN_NAME, selectedTab.name)
+    val lightColors = lightColorScheme(
+        background = Color(0xFFF8FAFC),       // Very light gray
+        surface = Color.White,                // White Cards
+        onBackground = Color(0xFF0F172A),     // Black/Dark Blue text
+        onSurface = Color(0xFF0F172A),        // Black text
+        surfaceVariant = Color(0xFFF1F5F9),   // For Tags and Dividers
+        onSurfaceVariant = Color(0xFF64748B)  // Gray Sub-text
+    )
+
+    // Wrap the entire screen in the Dynamic Theme
+    MaterialTheme(colorScheme = if (isDarkMode) darkColors else lightColors) {
+        
+        var selectedTab by remember(initialTab) {
+            mutableStateOf(
+                when (initialTab) {
+                    "pro_courses" -> BottomTab.PRO_COURSES
+                    "purchased_courses" -> BottomTab.PURCHASED_COURSES
+                    else -> BottomTab.HOME
+                }
+            )
         }
-    }
+        
+        LaunchedEffect(selectedTab) {
+            com.jcv.mocktests.utils.AnalyticsHelper.logEvent(com.google.firebase.analytics.FirebaseAnalytics.Event.SCREEN_VIEW) {
+                putString(com.google.firebase.analytics.FirebaseAnalytics.Param.SCREEN_NAME, selectedTab.name)
+            }
+        }
 
-    val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
-    val localStorage = remember { LocalStorage(context) }
-    val localDeviceId = remember { localStorage.getOrCreateDeviceId() }
-    
-    val auth = FirebaseAuth.getInstance()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
+        val localStorage = remember { LocalStorage(context) }
+        val localDeviceId = remember { localStorage.getOrCreateDeviceId() }
+        
+        val auth = FirebaseAuth.getInstance()
+        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+        val scope = rememberCoroutineScope()
 
-    var allCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
-    var proCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
-    var purchasedCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
-    
-    var approvedSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    
-    // NEW: Streak Counter State
-    var streakCount by remember { mutableIntStateOf(0) }
+        var allCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+        var proCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+        var purchasedCourses by remember { mutableStateOf<List<CourseModel>>(emptyList()) }
+        
+        var approvedSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
+        var isLoading by remember { mutableStateOf(true) }
+        var streakCount by remember { mutableIntStateOf(0) }
 
-    // NEW: SINGLE-DEVICE ENFORCEMENT & STREAK LISTENER
-    LaunchedEffect(auth.currentUser?.uid) {
-        val uid = auth.currentUser?.uid
-        if (uid != null) {
-            val db = FirebaseFirestore.getInstance()
-            db.collection("users").document(uid).addSnapshotListener { snap, _ ->
-                if (snap != null && snap.exists()) {
-                    val dbDeviceId = snap.getString("deviceId") ?: ""
-                    
-                    // If the database device ID does not match this phone, they logged in elsewhere!
-                    if (dbDeviceId.isNotEmpty() && dbDeviceId != localDeviceId) {
-                        auth.signOut()
-                        Toast.makeText(context, "Logged out: Your account was accessed from another device.", Toast.LENGTH_LONG).show()
-                        onNavigateToLogin()
+        LaunchedEffect(auth.currentUser?.uid) {
+            val uid = auth.currentUser?.uid
+            if (uid != null) {
+                val db = FirebaseFirestore.getInstance()
+                db.collection("users").document(uid).addSnapshotListener { snap, _ ->
+                    if (snap != null && snap.exists()) {
+                        val dbDeviceId = snap.getString("deviceId") ?: ""
+                        if (dbDeviceId.isNotEmpty() && dbDeviceId != localDeviceId) {
+                            auth.signOut()
+                            Toast.makeText(context, "Logged out: Your account was accessed from another device.", Toast.LENGTH_LONG).show()
+                            onNavigateToLogin()
+                        }
+                        streakCount = (snap.getLong("streakCount") ?: 0).toInt()
+                    } else {
+                        val initialData = mapOf(
+                            "deviceId" to localDeviceId,
+                            "streakCount" to 0
+                        )
+                        db.collection("users").document(uid).set(initialData, SetOptions.merge())
                     }
-                    
-                    // Fetch Streak Count
-                    streakCount = (snap.getLong("streakCount") ?: 0).toInt()
-                } else {
-                    // First time login, save this device ID and initialize streak
-                    val initialData = mapOf(
-                        "deviceId" to localDeviceId,
-                        "streakCount" to 0
-                    )
-                    db.collection("users").document(uid).set(initialData, SetOptions.merge())
                 }
             }
         }
-    }
 
-    LaunchedEffect(Unit) {
-        val db = FirebaseFirestore.getInstance()
-        val uid = auth.currentUser?.uid
+        LaunchedEffect(Unit) {
+            val db = FirebaseFirestore.getInstance()
+            val uid = auth.currentUser?.uid
 
-        val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
-        val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
-        
-        if (cachedCoursesStr.isNotEmpty()) {
-            val parsedCourses = cachedCoursesStr.split("|||").mapNotNull {
-                val parts = it.split("|")
-                if (parts.size >= 5) {
-                    CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3], parts[4].toIntOrNull() ?: 1)
-                } else if (parts.size == 4) {
-                    CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3], 1)
-                } else null
-            }
-            approvedSheetIds = cachedPurchasedStr.split(",").filter { it.isNotBlank() }
+            val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
+            val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
             
-            allCourses = parsedCourses
-            purchasedCourses = parsedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
-            proCourses = parsedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
-            
-            isLoading = false
-        }
-
-        db.collection("exams").document("testList").get().addOnSuccessListener { examDoc ->
-            val testsArray = examDoc.get("tests") as? List<Map<String, Any>> ?: emptyList()
-            
-            val fetchedCourses = testsArray.map { map ->
-                val title = map["title"] as? String ?: "JCV Course"
-                val feeString = map["fee"]?.toString() ?: "0"
-                val fee = feeString.toDoubleOrNull() ?: 0.0
-                val sheetId = map["sheetId"] as? String ?: ""
-                val topic = "OTHERS"
-                val duration = (map["durationMonths"] as? Number)?.toInt() ?: 1 
+            if (cachedCoursesStr.isNotEmpty()) {
+                val parsedCourses = cachedCoursesStr.split("|||").mapNotNull {
+                    val parts = it.split("|")
+                    if (parts.size >= 5) {
+                        CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3], parts[4].toIntOrNull() ?: 1)
+                    } else if (parts.size == 4) {
+                        CourseModel(parts[0], parts[1], parts[2].toDoubleOrNull() ?: 0.0, parts[3], 1)
+                    } else null
+                }
+                approvedSheetIds = cachedPurchasedStr.split(",").filter { it.isNotBlank() }
                 
-                CourseModel(sheetId, title, fee, topic, duration)
+                allCourses = parsedCourses
+                purchasedCourses = parsedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
+                proCourses = parsedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
+                
+                isLoading = false
             }
 
-            if (uid != null) {
-                db.collection("pending_registrations").whereEqualTo("uid", uid).whereEqualTo("status", "approved").get().addOnSuccessListener { paySnap ->
-                    approvedSheetIds = paySnap.documents.mapNotNull { it.getString("sheetId") }
+            db.collection("exams").document("testList").get().addOnSuccessListener { examDoc ->
+                val testsArray = examDoc.get("tests") as? List<Map<String, Any>> ?: emptyList()
+                
+                val fetchedCourses = testsArray.map { map ->
+                    val title = map["title"] as? String ?: "JCV Course"
+                    val feeString = map["fee"]?.toString() ?: "0"
+                    val fee = feeString.toDoubleOrNull() ?: 0.0
+                    val sheetId = map["sheetId"] as? String ?: ""
+                    val topic = "OTHERS"
+                    val duration = (map["durationMonths"] as? Number)?.toInt() ?: 1 
                     
+                    CourseModel(sheetId, title, fee, topic, duration)
+                }
+
+                if (uid != null) {
+                    db.collection("pending_registrations").whereEqualTo("uid", uid).whereEqualTo("status", "approved").get().addOnSuccessListener { paySnap ->
+                        approvedSheetIds = paySnap.documents.mapNotNull { it.getString("sheetId") }
+                        
+                        allCourses = fetchedCourses
+                        purchasedCourses = fetchedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
+                        proCourses = fetchedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
+                        isLoading = false
+                        
+                        val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}|${it.durationMonths}" }
+                        prefs.edit()
+                            .putString("cached_courses", coursesString)
+                            .putString("cached_purchased", approvedSheetIds.joinToString(","))
+                            .apply()
+                    }
+                } else {
                     allCourses = fetchedCourses
-                    purchasedCourses = fetchedCourses.filter { it.fee > 0.0 && approvedSheetIds.contains(it.sheetId) }
-                    proCourses = fetchedCourses.filter { it.fee > 0.0 && !approvedSheetIds.contains(it.sheetId) }
+                    proCourses = fetchedCourses.filter { it.fee > 0.0 }
                     isLoading = false
                     
                     val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}|${it.durationMonths}" }
                     prefs.edit()
                         .putString("cached_courses", coursesString)
-                        .putString("cached_purchased", approvedSheetIds.joinToString(","))
+                        .putString("cached_purchased", "")
                         .apply()
                 }
+            }
+        }
+
+        val handleCourseClick: (CourseModel) -> Unit = { course ->
+            if (course.sheetId.isNotBlank()) {
+                onNavigateToCourse(course.sheetId)
             } else {
-                allCourses = fetchedCourses
-                proCourses = fetchedCourses.filter { it.fee > 0.0 }
-                isLoading = false
-                
-                val coursesString = fetchedCourses.joinToString("|||") { "${it.sheetId}|${it.title}|${it.fee}|${it.topic}|${it.durationMonths}" }
-                prefs.edit()
-                    .putString("cached_courses", coursesString)
-                    .putString("cached_purchased", "")
-                    .apply()
+                Toast.makeText(context, "Error: Course ID is missing. Please contact admin.", Toast.LENGTH_SHORT).show()
             }
         }
-    }
 
-    val handleCourseClick: (CourseModel) -> Unit = { course ->
-        if (course.sheetId.isNotBlank()) {
-            onNavigateToCourse(course.sheetId)
-        } else {
-            Toast.makeText(context, "Error: Course ID is missing. Please contact admin.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
-                Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(ThemeBlue).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.AccountCircle, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(40.dp))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("JCV HUB", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        }
-                        IconButton(onClick = { scope.launch { drawerState.close() } }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = ThemeBlue) },
-                        label = { Text("Home Dashboard", fontWeight = FontWeight.Bold) },
-                        selected = selectedTab == BottomTab.HOME,
-                        onClick = { 
-                            selectedTab = BottomTab.HOME
-                            scope.launch { drawerState.close() }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    if (purchasedCourses.isNotEmpty()) {
-                        DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
-                        purchasedCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { handleCourseClick(course) }
-                        }
-                    }
-
-                    if (proCourses.isNotEmpty()) {
-                        DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
-                        proCourses.forEach { course ->
-                            DrawerCourseItem(course.title) { handleCourseClick(course) }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-                    Divider()
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Person, contentDescription = "User", modifier = Modifier.size(40.dp), tint = Color.Gray)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(auth.currentUser?.displayName ?: "User Name", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                            Text(auth.currentUser?.email ?: "user@jcv.com", fontSize = 12.sp, color = Color.Gray)
-                        }
-                    }
-                    
-                    OutlinedButton(
-                        onClick = {
-                            auth.signOut()
-                            onNavigateToLogin()
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
-                    ) {
-                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Logout")
-                    }
-                }
-            }
-        }
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
-                        }
-                    },
-                    actions = {
-                        // NEW: STREAK COUNTER DISPLAY
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(
+                    modifier = Modifier.width(300.dp),
+                    drawerContainerColor = MaterialTheme.colorScheme.surface
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
                         Row(
+                            modifier = Modifier.fillMaxWidth().background(ThemeBlue).padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 6.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("🔥", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AccountCircle, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(40.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("JCV HUB", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            }
+                            IconButton(onClick = { scope.launch { drawerState.close() } }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = ThemeBlue) },
+                            label = { Text("Home Dashboard", fontWeight = FontWeight.Bold) },
+                            selected = selectedTab == BottomTab.HOME,
+                            onClick = { 
+                                selectedTab = BottomTab.HOME
+                                scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                        )
+
+                        Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+
+                        if (purchasedCourses.isNotEmpty()) {
+                            DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
+                            purchasedCourses.forEach { course ->
+                                DrawerCourseItem(course.title) { handleCourseClick(course) }
+                            }
+                        }
+
+                        if (proCourses.isNotEmpty()) {
+                            DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
+                            proCourses.forEach { course ->
+                                DrawerCourseItem(course.title) { handleCourseClick(course) }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+                        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = "User", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(auth.currentUser?.displayName ?: "User Name", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(auth.currentUser?.email ?: "user@jcv.com", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                         
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        IconButton(onClick = onToggleTheme) {
-                            Icon(
-                                imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Toggle Theme",
-                                tint = Color.White
-                            )
+                        OutlinedButton(
+                            onClick = {
+                                auth.signOut()
+                                onNavigateToLogin()
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE53935))
+                        ) {
+                            Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Logout")
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = ThemeBlue)
-                )
-            },
-            bottomBar = {
-                NavigationBar(
-                    containerColor = ThemeBlue, 
-                    contentColor = Color.White  
-                ) {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home", fontSize = 10.sp) },
-                        selected = selectedTab == BottomTab.HOME,
-                        onClick = { selectedTab = BottomTab.HOME },
-                        colors = navColors()
-                    )
-                    
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Star, contentDescription = "Pro Courses") },
-                        label = { Text("Pro Courses", fontSize = 10.sp) },
-                        selected = selectedTab == BottomTab.PRO_COURSES,
-                        onClick = { selectedTab = BottomTab.PRO_COURSES },
-                        colors = navColors()
-                    )
-                    
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.List, contentDescription = "Purchased") },
-                        label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
-                        selected = selectedTab == BottomTab.PURCHASED_COURSES,
-                        onClick = { 
-                            if (auth.currentUser == null) onNavigateToLogin() 
-                            else selectedTab = BottomTab.PURCHASED_COURSES 
-                        },
-                        colors = navColors()
-                    )
+                    }
                 }
             }
-        ) { paddingValues ->
-            Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(MaterialTheme.colorScheme.background)) { 
-                when (selectedTab) {
-                    BottomTab.HOME -> {
-                        DashboardHomeContent(
-                            allCourses = allCourses,
-                            purchasedCourses = purchasedCourses,
-                            proCourses = proCourses,
-                            approvedSheetIds = approvedSheetIds,
-                            auth = auth,
-                            isLoading = isLoading,
-                            onCourseClick = handleCourseClick
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                            }
+                        },
+                        actions = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text("🔥", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                            }
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            IconButton(onClick = onToggleTheme) {
+                                Icon(
+                                    imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                    contentDescription = "Toggle Theme",
+                                    tint = Color.White
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = ThemeBlue)
+                    )
+                },
+                bottomBar = {
+                    NavigationBar(
+                        containerColor = ThemeBlue, 
+                        contentColor = Color.White  
+                    ) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                            label = { Text("Home", fontSize = 10.sp) },
+                            selected = selectedTab == BottomTab.HOME,
+                            onClick = { selectedTab = BottomTab.HOME },
+                            colors = navColors()
+                        )
+                        
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Star, contentDescription = "Pro Courses") },
+                            label = { Text("Pro Courses", fontSize = 10.sp) },
+                            selected = selectedTab == BottomTab.PRO_COURSES,
+                            onClick = { selectedTab = BottomTab.PRO_COURSES },
+                            colors = navColors()
+                        )
+                        
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.List, contentDescription = "Purchased") },
+                            label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
+                            selected = selectedTab == BottomTab.PURCHASED_COURSES,
+                            onClick = { 
+                                if (auth.currentUser == null) onNavigateToLogin() 
+                                else selectedTab = BottomTab.PURCHASED_COURSES 
+                            },
+                            colors = navColors()
                         )
                     }
-                    BottomTab.PRO_COURSES -> {
-                        if (isLoading && proCourses.isEmpty()) LoadingLogo() 
-                        else CourseGridScreen("Pro Courses", proCourses, approvedSheetIds, handleCourseClick)
-                    }
-                    BottomTab.PURCHASED_COURSES -> {
-                        if (isLoading && purchasedCourses.isEmpty()) LoadingLogo() 
-                        else CourseGridScreen("Purchased Courses", purchasedCourses, approvedSheetIds, handleCourseClick)
+                }
+            ) { paddingValues ->
+                Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(MaterialTheme.colorScheme.background)) { 
+                    when (selectedTab) {
+                        BottomTab.HOME -> {
+                            DashboardHomeContent(
+                                allCourses = allCourses,
+                                purchasedCourses = purchasedCourses,
+                                proCourses = proCourses,
+                                approvedSheetIds = approvedSheetIds,
+                                auth = auth,
+                                isLoading = isLoading,
+                                onCourseClick = handleCourseClick
+                            )
+                        }
+                        BottomTab.PRO_COURSES -> {
+                            if (isLoading && proCourses.isEmpty()) LoadingLogo() 
+                            else CourseGridScreen("Pro Courses", proCourses, approvedSheetIds, handleCourseClick)
+                        }
+                        BottomTab.PURCHASED_COURSES -> {
+                            if (isLoading && purchasedCourses.isEmpty()) LoadingLogo() 
+                            else CourseGridScreen("Purchased Courses", purchasedCourses, approvedSheetIds, handleCourseClick)
+                        }
                     }
                 }
             }
@@ -427,7 +446,7 @@ fun DrawerSectionHeader(title: String, icon: ImageVector, iconTint: Color) {
     ) {
         Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Text(title, fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+        Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -542,7 +561,7 @@ fun DashboardHomeContent(
                 LoadingLogo()
             } else if (displayedCourses.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No courses found in this category.", color = Color.Gray)
+                    Text("No courses found in this category.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
@@ -582,7 +601,7 @@ fun UserProfileHeader(auth: FirebaseAuth) {
                 modifier = Modifier
                     .size(80.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
             )
             
             Spacer(modifier = Modifier.width(16.dp))
@@ -592,7 +611,7 @@ fun UserProfileHeader(auth: FirebaseAuth) {
                 horizontalAlignment = Alignment.End
             ) {
                 Text(userName, fontWeight = FontWeight.Black, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                Text(mobileNumber, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(top = 4.dp))
+                Text(mobileNumber, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
@@ -604,6 +623,7 @@ fun PastelCategoryCard(
     backgroundColor: Color,
     onClick: () -> Unit
 ) {
+    // We intentionally keep Pastel cards brightly colored regardless of theme
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
@@ -629,7 +649,7 @@ fun PastelCategoryCard(
             
             Text(
                 text = title,
-                color = Color.Black,
+                color = Color.Black, // Dark text is necessary on light pastel backgrounds
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.End,
@@ -671,7 +691,7 @@ fun CourseGridScreen(
 }
 
 // ---------------------------------------------------------------------------
-// HYBRID CARD VIEW: Vibrant Banner on Left, Text Details on Right
+// HYBRID CARD VIEW (Theme Aware)
 // ---------------------------------------------------------------------------
 @Composable
 fun CourseCardView(
@@ -679,7 +699,7 @@ fun CourseCardView(
     isUnlocked: Boolean, 
     onClick: () -> Unit
 ) {
-    val originalPrice = course.fee * 5 // Auto-calculates 80% OFF original price
+    val originalPrice = course.fee * 5 
     val goldColor = Color(0xFFFFD700)
     
     val bannerGradient = Brush.verticalGradient(
@@ -770,7 +790,6 @@ fun CourseCardView(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -784,7 +803,7 @@ fun CourseCardView(
                     if (isUnlocked) {
                         Icon(Icons.Default.CheckCircle, contentDescription = "Unlocked", tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
                     } else {
-                        Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Lock, contentDescription = "Locked", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
                     }
                 }
 
@@ -812,7 +831,7 @@ fun CourseCardView(
                     Text(
                         text = "₹${originalPrice.toInt()}",
                         fontSize = 12.sp,
-                        color = Color(0xFF94A3B8),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textDecoration = TextDecoration.LineThrough,
                         modifier = Modifier.padding(bottom = 1.dp)
                     )
@@ -829,8 +848,7 @@ fun CourseCardView(
                 }
             }
         }
-        
-        Divider(color = Color.LightGray.copy(alpha = 0.2f), thickness = 1.dp)
+        Divider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 1.dp)
     }
 }
 
@@ -838,13 +856,13 @@ fun CourseCardView(
 fun CourseTag(text: String) {
     Box(
         modifier = Modifier
-            .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
             .padding(horizontal = 6.dp, vertical = 4.dp)
     ) {
         Text(
             text = text,
             fontSize = 9.sp,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Bold
         )
     }
