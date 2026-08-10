@@ -39,9 +39,44 @@ fun SignupScreen(
     
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    
+    // NEW: State for the Verification Popup
+    var showVerificationDialog by remember { mutableStateOf(false) }
 
     val auth = remember { FirebaseAuth.getInstance() }
     val context = LocalContext.current
+
+    // ==========================================
+    // VERIFICATION INSTRUCTIONS DIALOG
+    // ==========================================
+    if (showVerificationDialog) {
+        AlertDialog(
+            onDismissRequest = { /* Force them to click OK */ },
+            containerColor = Color.White,
+            title = {
+                Text("Verify Your Email", fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
+            },
+            text = {
+                Text(
+                    text = "Your account has been created! We have sent a verification link to $email.\n\nPlease check your inbox (and spam folder) and click the link to activate your account before logging in.",
+                    color = Color.DarkGray,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showVerificationDialog = false
+                        onNavigateToLogin() // Send them to login screen
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
+                ) {
+                    Text("Go to Login", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -118,7 +153,7 @@ fun SignupScreen(
                                 val profileUpdates = UserProfileChangeRequest.Builder().setDisplayName(name.trim()).build()
                                 user.updateProfile(profileUpdates)
 
-                                // 2. Save User details, Streak, and Device ID to Firestore
+                                // 2. Save User details to Firestore
                                 val deviceId = LocalStorage(context).getOrCreateDeviceId()
                                 val userData = hashMapOf(
                                     "name" to name.trim(),
@@ -133,9 +168,12 @@ fun SignupScreen(
                                 FirebaseFirestore.getInstance().collection("users").document(user.uid)
                                     .set(userData, SetOptions.merge())
                                     .addOnSuccessListener {
-                                        isLoading = false
-                                        Toast.makeText(context, "Account Created Successfully!", Toast.LENGTH_SHORT).show()
-                                        onNavigateToHome()
+                                        // 3. Send Verification Email & Show Popup
+                                        user.sendEmailVerification().addOnCompleteListener {
+                                            auth.signOut() // Immediately sign them out so they can't bypass verification
+                                            isLoading = false
+                                            showVerificationDialog = true 
+                                        }
                                     }
                             }
                         } else {
