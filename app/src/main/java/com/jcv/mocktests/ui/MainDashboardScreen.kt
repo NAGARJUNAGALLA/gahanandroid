@@ -467,7 +467,9 @@ fun DashboardHomeContent(
         Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, bottom = 16.dp)
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp)
             ) {
                 IconButton(
                     onClick = { selectedCategory = null },
