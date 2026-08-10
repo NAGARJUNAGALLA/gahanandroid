@@ -30,9 +30,7 @@ import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
 
-// App Theme Colors
 private val ViewSeriesBlue = Color(0xFF2962FF)
-private val ViewSeriesLightBlue = Color(0xFF64B5F6)
 private val PrimaryGradient = Brush.verticalGradient(listOf(Color(0xFF1565C0), ViewSeriesBlue))
 
 @Composable
@@ -84,20 +82,39 @@ fun AuthScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (resetEmail.isBlank()) {
+                        val emailToReset = resetEmail.trim()
+                        if (emailToReset.isBlank()) {
                             Toast.makeText(context, "Please enter your email", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isSendingReset = true
-                        auth.sendPasswordResetEmail(resetEmail.trim())
-                            .addOnCompleteListener { task ->
-                                isSendingReset = false
-                                if (task.isSuccessful) {
-                                    Toast.makeText(context, "Password reset link sent to your email!", Toast.LENGTH_LONG).show()
-                                    showResetDialog = false
+                        
+                        // 1. CHECK IF EMAIL EXISTS IN DATABASE FIRST
+                        FirebaseFirestore.getInstance().collection("users")
+                            .whereEqualTo("email", emailToReset)
+                            .get()
+                            .addOnSuccessListener { documents ->
+                                if (documents.isEmpty) {
+                                    // EMAIL NOT FOUND
+                                    isSendingReset = false
+                                    Toast.makeText(context, "This email is not registered with us.", Toast.LENGTH_LONG).show()
                                 } else {
-                                    Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_LONG).show()
+                                    // EMAIL FOUND, PROCEED TO SEND RESET LINK
+                                    auth.sendPasswordResetEmail(emailToReset)
+                                        .addOnCompleteListener { task ->
+                                            isSendingReset = false
+                                            if (task.isSuccessful) {
+                                                Toast.makeText(context, "Password reset link sent to your email!", Toast.LENGTH_LONG).show()
+                                                showResetDialog = false
+                                            } else {
+                                                Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
                                 }
+                            }
+                            .addOnFailureListener { e ->
+                                isSendingReset = false
+                                Toast.makeText(context, "Error checking email: ${e.message}", Toast.LENGTH_LONG).show()
                             }
                     },
                     enabled = !isSendingReset,
@@ -121,7 +138,7 @@ fun AuthScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(320.dp)
-                .clip(RoundedCornerShape(bottomStart = 80.dp)) // Unique bottom-left curve
+                .clip(RoundedCornerShape(bottomStart = 80.dp))
                 .background(PrimaryGradient)
         ) {
             Column(
@@ -151,7 +168,7 @@ fun AuthScreen(
                 .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(240.dp)) // Pushes the card down to overlap the header
+            Spacer(modifier = Modifier.height(240.dp))
 
             Card(
                 modifier = Modifier
@@ -168,7 +185,6 @@ fun AuthScreen(
                     Text("Login to Continue", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // "Petal" Shaped Text Field
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
@@ -176,7 +192,7 @@ fun AuthScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp), // Unique Shape
+                        shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -188,7 +204,7 @@ fun AuthScreen(
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp), // Unique Shape
+                        shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
                     )
                     
@@ -228,7 +244,7 @@ fun AuthScreen(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            shape = RoundedCornerShape(50), // Fully rounded pill shape
+                            shape = RoundedCornerShape(50),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF57C00))
                         ) {
                             if (isResending) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFFF57C00), strokeWidth = 2.dp)
@@ -236,7 +252,6 @@ fun AuthScreen(
                         }
                     }
 
-                    // Primary Login Button
                     Button(
                         onClick = {
                             if (email.isBlank() || password.isBlank()) {
@@ -274,7 +289,7 @@ fun AuthScreen(
                         },
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         enabled = !isLoading,
-                        shape = RoundedCornerShape(50), // Fully rounded pill shape
+                        shape = RoundedCornerShape(50),
                         colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
                     ) {
                         if (isLoading) {
