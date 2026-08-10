@@ -6,15 +6,20 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,14 +27,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
 import com.jcv.mocktests.ui.*
+import com.jcv.mocktests.utils.LocalStorage
 import java.net.URLDecoder
 import java.net.URLEncoder
-import androidx.fragment.app.FragmentActivity
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import com.jcv.mocktests.utils.LocalStorage
+
 class MainActivity : FragmentActivity() {
 
     // 1. The permission request launcher for Android 13+ Notifications
@@ -90,6 +91,7 @@ fun MockTestsApp() {
     val context = LocalContext.current
     val localStorage = remember { LocalStorage(context) }
     val systemTheme = isSystemInDarkTheme()
+    
     var isDarkMode by remember { mutableStateOf(localStorage.isDarkMode(systemTheme)) }
     val navController = rememberNavController()
     
@@ -111,6 +113,7 @@ fun MockTestsApp() {
                 }
             )
         }
+        
         // ADD THIS NEW ROUTE
         composable("unlock") {
             UnlockScreen(
@@ -221,6 +224,5 @@ fun MockTestsApp() {
                 }
             )
         }
-        
     }
 }
