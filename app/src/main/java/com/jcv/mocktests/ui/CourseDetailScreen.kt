@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.List
@@ -37,6 +38,10 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 private val DarkHeaderColor = Color(0xFF181E2F)
 private val ViewSeriesBlue = Color(0xFF1E90FF)
@@ -71,9 +76,10 @@ fun CourseDetailScreen(
     var staticQrUrl by remember { mutableStateOf("") }
     var courseFee by remember { mutableDoubleStateOf(0.0) }
     var courseTitle by remember { mutableStateOf("Course") }
-    var courseDuration by remember { mutableIntStateOf(1) } // Fetched from Firebase (defaults to 1 month)
+    var courseDuration by remember { mutableIntStateOf(1) }
     
-    var paymentStatus by remember { mutableStateOf<String?>(null) } // "approved", "pending", "rejected", or null
+    var paymentStatus by remember { mutableStateOf<String?>(null) }
+    var subscriptionExpiry by remember { mutableStateOf<Date?>(null) } // NEW: Holds Expiry Date
     var showPaymentDialog by remember { mutableStateOf(false) }
     var isSubmittingPayment by remember { mutableStateOf(false) }
 
@@ -102,7 +108,7 @@ fun CourseDetailScreen(
             }
         }
 
-        // 3. Listen to Real-Time Payment Status
+        // 3. Listen to Real-Time Payment Status and Calculate Expiry
         if (uid != null) {
             db.collection("pending_registrations")
                 .whereEqualTo("uid", uid)
@@ -111,8 +117,22 @@ fun CourseDetailScreen(
                     if (snap != null && !snap.isEmpty) {
                         val latestDoc = snap.documents.maxByOrNull { it.getTimestamp("createdAt")?.toDate()?.time ?: 0L }
                         paymentStatus = latestDoc?.getString("status")
+                        
+                        // NEW: Calculate Expiry Date if Approved
+                        if (paymentStatus == "approved") {
+                            val createdAt = latestDoc?.getTimestamp("createdAt")?.toDate()
+                            val savedDuration = (latestDoc?.get("durationMonths") as? Number)?.toInt() ?: courseDuration
+                            
+                            if (createdAt != null) {
+                                val calendar = Calendar.getInstance()
+                                calendar.time = createdAt
+                                calendar.add(Calendar.MONTH, savedDuration)
+                                subscriptionExpiry = calendar.time
+                            }
+                        }
                     } else {
                         paymentStatus = null
+                        subscriptionExpiry = null
                     }
                 }
         }
@@ -176,7 +196,7 @@ fun CourseDetailScreen(
                     "sheetId" to courseId,
                     "courseTitle" to courseTitle,
                     "fee" to courseFee,
-                    "durationMonths" to courseDuration, // Transmits fetched validity duration to admin
+                    "durationMonths" to courseDuration, 
                     "utr" to utr,
                     "app" to app,
                     "status" to "pending",
@@ -274,42 +294,59 @@ fun CourseDetailScreen(
                     
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // DURATION BANNER
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
-                        border = BorderStroke(1.dp, ViewSeriesBlue)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text("Subscription Validity", fontSize = 12.sp, color = Color.Gray)
-                                Text("$courseDuration Months Access", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = DarkHeaderColor)
-                            }
-                            Text("₹${courseFee.toInt()}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = ViewSeriesBlue)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
                     if (paymentStatus == "approved") {
+                        // NEW: Approved Banner showing the Expiry Date
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
                             border = BorderStroke(1.dp, Color(0xFF4CAF50))
                         ) {
-                            Text(
-                                text = "Course Unlocked! Go to the Content tab to begin.",
-                                color = Color(0xFF2E7D32),
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(16.dp).fillMaxWidth()
-                            )
+                            Row(
+                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = "Active", tint = Color(0xFF4CAF50), modifier = Modifier.size(32.dp))
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column {
+                                    Text(
+                                        text = "Course Unlocked",
+                                        color = Color(0xFF2E7D32),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                    if (subscriptionExpiry != null) {
+                                        val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+                                        Text(
+                                            text = "Valid until ${dateFormat.format(subscriptionExpiry!!)}",
+                                            color = Color(0xFF388E3C),
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     } else {
+                        // Pre-Purchase Duration Banner
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                            border = BorderStroke(1.dp, ViewSeriesBlue)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Subscription Validity", fontSize = 12.sp, color = Color.Gray)
+                                    Text("$courseDuration Months Access", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = DarkHeaderColor)
+                                }
+                                Text("₹${courseFee.toInt()}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = ViewSeriesBlue)
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
                         OutlinedButton(
                             onClick = { selectedTab = 1 }, 
                             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -383,6 +420,29 @@ fun CourseDetailScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            
+                            // NEW: Top Expiry Banner in Content Tab
+                            if (subscriptionExpiry != null) {
+                                item {
+                                    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                                        border = BorderStroke(1.dp, Color(0xFF4CAF50)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Active Subscription: Valid until ${dateFormat.format(subscriptionExpiry!!)}",
+                                            color = Color(0xFF2E7D32),
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                }
+                            }
+
                             items(tests) { test ->
                                 val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
                                 val testScore = localStorage.getTestScore(courseId, test.name)
