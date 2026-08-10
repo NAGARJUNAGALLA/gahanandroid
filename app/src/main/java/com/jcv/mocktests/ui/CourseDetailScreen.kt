@@ -3,6 +3,7 @@ package com.jcv.mocktests.ui
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,9 +37,9 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage
 import java.net.URLEncoder
-import androidx.compose.foundation.BorderStroke
 
-val DarkHeaderColor = Color(0xFF181E2F)
+private val DarkHeaderColor = Color(0xFF181E2F)
+private val ViewSeriesBlue = Color(0xFF1E90FF)
 
 data class TestSummary(
     val name: String,
@@ -58,18 +59,19 @@ fun CourseDetailScreen(
     val localStorage = remember { LocalStorage(context) }
     val auth = remember { FirebaseAuth.getInstance() }
     
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT")
     
     var tests by remember { mutableStateOf<List<TestSummary>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    // Payment & Subscription States
+    // Dynamic Payment & Subscription States from Firebase
     var upiId by remember { mutableStateOf("") }
     var merchantName by remember { mutableStateOf("JCV MOCK TESTS") }
     var staticQrUrl by remember { mutableStateOf("") }
     var courseFee by remember { mutableDoubleStateOf(0.0) }
     var courseTitle by remember { mutableStateOf("Course") }
+    var courseDuration by remember { mutableIntStateOf(1) } // Fetched from Firebase (defaults to 1 month)
     
     var paymentStatus by remember { mutableStateOf<String?>(null) } // "approved", "pending", "rejected", or null
     var showPaymentDialog by remember { mutableStateOf(false) }
@@ -89,13 +91,14 @@ fun CourseDetailScreen(
             }
         }
 
-        // 2. Fetch Course Fee and Title from testList
+        // 2. Fetch Course Fee, Title, and DURATION from testList
         db.collection("exams").document("testList").get().addOnSuccessListener { doc ->
             val testsArray = doc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             val matchedCourse = testsArray.find { it["sheetId"] == courseId }
             if (matchedCourse != null) {
                 courseTitle = matchedCourse["title"] as? String ?: "Course"
                 courseFee = (matchedCourse["fee"]?.toString()?.toDoubleOrNull()) ?: 0.0
+                courseDuration = (matchedCourse["durationMonths"] as? Number)?.toInt() ?: 1
             }
         }
 
@@ -106,7 +109,6 @@ fun CourseDetailScreen(
                 .whereEqualTo("sheetId", courseId)
                 .addSnapshotListener { snap, _ ->
                     if (snap != null && !snap.isEmpty) {
-                        // Get the most recent record if there are multiple attempts
                         val latestDoc = snap.documents.maxByOrNull { it.getTimestamp("createdAt")?.toDate()?.time ?: 0L }
                         paymentStatus = latestDoc?.getString("status")
                     } else {
@@ -155,6 +157,7 @@ fun CourseDetailScreen(
         PaymentDialog(
             courseTitle = courseTitle,
             courseFee = courseFee,
+            courseDuration = courseDuration,
             isRejected = paymentStatus == "rejected",
             isSubmitting = isSubmittingPayment,
             upiId = upiId,
@@ -173,6 +176,7 @@ fun CourseDetailScreen(
                     "sheetId" to courseId,
                     "courseTitle" to courseTitle,
                     "fee" to courseFee,
+                    "durationMonths" to courseDuration, // Transmits fetched validity duration to admin
                     "utr" to utr,
                     "app" to app,
                     "status" to "pending",
@@ -232,6 +236,7 @@ fun CourseDetailScreen(
             }
 
             if (selectedTab == 0) {
+                // OVERVIEW TAB
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -267,7 +272,28 @@ fun CourseDetailScreen(
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // DURATION BANNER
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                        border = BorderStroke(1.dp, ViewSeriesBlue)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Subscription Validity", fontSize = 12.sp, color = Color.Gray)
+                                Text("$courseDuration Months Access", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = DarkHeaderColor)
+                            }
+                            Text("₹${courseFee.toInt()}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = ViewSeriesBlue)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
                     
                     if (paymentStatus == "approved") {
                         Card(
@@ -295,6 +321,7 @@ fun CourseDetailScreen(
                     }
                 }
             } else {
+                // CONTENT TAB / PAYWALL
                 Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF9FAFB)), contentAlignment = Alignment.TopCenter) {
                     if (isLoading) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -319,7 +346,11 @@ fun CourseDetailScreen(
                                     textAlign = TextAlign.Center
                                 )
                             } else {
-                                Text("Unlock this course to access all ${tests.size} premium mock tests.", color = Color.Gray, textAlign = TextAlign.Center)
+                                Text(
+                                    text = "Unlock this course for $courseDuration Months to access all ${tests.size} premium mock tests.", 
+                                    color = Color.Gray, 
+                                    textAlign = TextAlign.Center
+                                )
                                 Spacer(modifier = Modifier.height(32.dp))
                                 
                                 if (paymentStatus == "rejected") {
@@ -333,7 +364,11 @@ fun CourseDetailScreen(
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
-                                    Text(if (courseFee > 0) "PAY ₹${courseFee.toInt()} TO UNLOCK" else "UNLOCK COURSE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(
+                                        text = if (courseFee > 0) "PAY ₹${courseFee.toInt()} FOR $courseDuration MONTHS" else "UNLOCK COURSE", 
+                                        fontWeight = FontWeight.Bold, 
+                                        fontSize = 16.sp
+                                    )
                                 }
                             }
                         }
@@ -445,6 +480,7 @@ fun CourseDetailScreen(
 fun PaymentDialog(
     courseTitle: String,
     courseFee: Double,
+    courseDuration: Int,
     isRejected: Boolean,
     isSubmitting: Boolean,
     upiId: String,
@@ -479,7 +515,7 @@ fun PaymentDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Unlock Course", fontWeight = FontWeight.Bold, color = ViewSeriesBlue, fontSize = 18.sp)
+                Text("Unlock Course ($courseDuration Months)", fontWeight = FontWeight.Bold, color = ViewSeriesBlue, fontSize = 16.sp)
                 IconButton(onClick = onDismiss, enabled = !isSubmitting) {
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
                 }
