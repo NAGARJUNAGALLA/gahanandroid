@@ -24,17 +24,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,7 +55,6 @@ private val PastelColors = listOf(
     Color(0xFFE0F7FA)  
 )
 
-// UPDATED: Added durationMonths to cache and pass validity
 data class CourseModel(
     val sheetId: String,
     val title: String,
@@ -111,7 +106,6 @@ fun MainDashboardScreen(
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
-        // 1. Load Local Cache
         val cachedCoursesStr = prefs.getString("cached_courses", "") ?: ""
         val cachedPurchasedStr = prefs.getString("cached_purchased", "") ?: ""
         
@@ -133,7 +127,6 @@ fun MainDashboardScreen(
             isLoading = false
         }
 
-        // 2. Background Fetch
         db.collection("exams").document("testList").get().addOnSuccessListener { examDoc ->
             val testsArray = examDoc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             
@@ -143,7 +136,7 @@ fun MainDashboardScreen(
                 val fee = feeString.toDoubleOrNull() ?: 0.0
                 val sheetId = map["sheetId"] as? String ?: ""
                 val topic = "OTHERS"
-                val duration = (map["durationMonths"] as? Number)?.toInt() ?: 1 // Fetch Duration!
+                val duration = (map["durationMonths"] as? Number)?.toInt() ?: 1 
                 
                 CourseModel(sheetId, title, fee, topic, duration)
             }
@@ -502,7 +495,8 @@ fun DashboardHomeContent(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     itemsIndexed(displayedCourses) { index, course ->
                         CourseCardView(
@@ -612,7 +606,8 @@ fun CourseGridScreen(
         Spacer(modifier = Modifier.height(12.dp))
         
         LazyColumn(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
             itemsIndexed(courses) { index, course ->
                 CourseCardView(
@@ -625,7 +620,7 @@ fun CourseGridScreen(
 }
 
 // ---------------------------------------------------------------------------
-// NEW: DYNAMIC COLORFUL THUMBNAIL CARD
+// NEW: VIBRANT 2D "PROMOTIONAL BANNER" COURSE CARD
 // ---------------------------------------------------------------------------
 @Composable
 fun CourseCardView(
@@ -633,203 +628,163 @@ fun CourseCardView(
     isUnlocked: Boolean, 
     onClick: () -> Unit
 ) {
-    val originalPrice = course.fee * 5 // Auto-calculates 80% OFF original price
+    val goldColor = Color(0xFFFFD700)
+    val darkBlueBg = Color(0xFF0F172A)
     
-    // Custom Gradients to match the fiery/gold promotional style
-    val bgGradient = Brush.linearGradient(
-        colors = listOf(Color(0xFF3B0000), Color(0xFF0A0000)) // Deep red to black
+    // Background Gradient (Dark Red to Black)
+    val bannerGradient = Brush.verticalGradient(
+        colors = listOf(Color(0xFF3B0000), Color(0xFF050000))
     )
-    val goldGradient = Brush.linearGradient(
-        colors = listOf(Color(0xFFFFD700), Color(0xFFF59E0B)) // Gold to Orange
+
+    // Red Ribbon Gradient
+    val ribbonGradient = Brush.horizontalGradient(
+        colors = listOf(Color(0xFF8B0000), Color(0xFFD32F2F), Color(0xFF8B0000))
     )
-    
-    Column(
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .background(MaterialTheme.colorScheme.surface)
+            .padding(bottom = 16.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.5.dp, goldColor.copy(alpha = 0.6f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.Top
+                .background(bannerGradient)
+                .padding(16.dp)
         ) {
-            // LEFT SIDE: COLORFUL DYNAMIC THUMBNAIL
-            Box(
-                modifier = Modifier
-                    .width(135.dp)
-                    .height(90.dp)
-                    .background(bgGradient, RoundedCornerShape(8.dp))
-                    .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f), RoundedCornerShape(8.dp)) // Gold Border
-                    .padding(6.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.SpaceBetween
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                
+                // ----------------------------------------------------
+                // ROW 1: Logo & Category Banner
+                // ----------------------------------------------------
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
                 ) {
-                    // THUMBNAIL ROW 1: Logo & Pro Badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
                             painter = painterResource(id = R.drawable.logo),
                             contentDescription = "Logo",
-                            modifier = Modifier.size(18.dp).clip(CircleShape).background(Color.White)
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(1.5.dp, goldColor, CircleShape)
                         )
                         
-                        Box(
-                            modifier = Modifier
-                                .background(goldGradient, RoundedCornerShape(3.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = if (course.fee > 0) "PRO" else "FREE",
-                                color = Color.Black,
-                                fontSize = 7.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
-                    }
-
-                    // THUMBNAIL ROW 2: Vibrant Course Title
-                    Text(
-                        text = course.title.uppercase(),
-                        color = Color(0xFFFFD700), // Bright Gold text
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                        style = TextStyle(
-                            shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)
-                        )
-                    )
-
-                    // THUMBNAIL ROW 3: Validity & Fee Box
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        // Validity Tag (Dark Blue)
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF1E3A8A), RoundedCornerShape(3.dp))
-                                .border(0.5.dp, Color(0xFF60A5FA), RoundedCornerShape(3.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "${course.durationMonths} Months",
-                                color = Color.White,
-                                fontSize = 7.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Spacer(modifier = Modifier.width(8.dp))
                         
-                        // Fee Tag (Red)
+                        // Red Ribbon Category Tag
                         Box(
                             modifier = Modifier
-                                .background(Color(0xFF991B1B), RoundedCornerShape(3.dp))
-                                .border(0.5.dp, Color(0xFFF87171), RoundedCornerShape(3.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                                .background(ribbonGradient, RoundedCornerShape(4.dp))
+                                .border(0.5.dp, goldColor, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "₹${course.fee.toInt()}",
+                                text = if (course.fee > 0) "PRO COURSE" else "FREE COURSE",
                                 color = Color.White,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.ExtraBold
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
                             )
                         }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // RIGHT SIDE: COURSE DETAILS & PRICING
-            Column(modifier = Modifier.weight(1f)) {
-                
-                // RIGHT ROW 1: Tags & Lock/Unlock Status
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CourseTag("TESTS")
-                        CourseTag("VIDEOS")
-                        CourseTag("FILES")
-                    }
-                    
                     if (isUnlocked) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = "Unlocked", tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Unlocked",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(24.dp).background(Color.White, CircleShape)
+                        )
                     } else {
-                        Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.LightGray, modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Locked",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
-
-                // RIGHT ROW 2: Main Course Title
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // ----------------------------------------------------
+                // ROW 2: Main Bold Title
+                // ----------------------------------------------------
                 Text(
-                    text = course.title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = course.title.uppercase(),
+                    color = goldColor,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    lineHeight = 18.sp
+                    lineHeight = 28.sp
                 )
-
-                // RIGHT ROW 3: Pricing Data (80% Off)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "₹${course.fee.toInt()}",
-                        fontWeight = FontWeight.Black,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // ----------------------------------------------------
+                // ROW 3: Bottom Badges (Topic / Validity / Fee)
+                // ----------------------------------------------------
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Badge 1: Quick Revision (Dark Red)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(55.dp)
+                            .background(Color(0xFF5C0000), RoundedCornerShape(8.dp))
+                            .border(1.dp, goldColor, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("QUICK", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                            Text("REVISION", color = goldColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.width(8.dp))
                     
-                    Text(
-                        text = "₹${originalPrice.toInt()}",
-                        fontSize = 12.sp,
-                        color = Color(0xFF94A3B8),
-                        textDecoration = TextDecoration.LineThrough
-                    )
+                    // Badge 2: Validity (Dark Blue)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(55.dp)
+                            .background(darkBlueBg, RoundedCornerShape(8.dp))
+                            .border(1.dp, goldColor, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${course.durationMonths} MONTHS", color = goldColor, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                            Text("VALIDITY", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     
-                    Text(
-                        text = "80% OFF",
-                        fontSize = 12.sp,
-                        color = Color(0xFFE07A5F), // Coral/Red tint
-                        fontWeight = FontWeight.ExtraBold
-                    )
+                    // Badge 3: Fee (Dark Blue)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(55.dp)
+                            .background(darkBlueBg, RoundedCornerShape(8.dp))
+                            .border(1.dp, goldColor, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("₹${course.fee.toInt()}/-", color = goldColor, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    }
                 }
             }
         }
-        
-        Divider(color = Color.LightGray.copy(alpha = 0.3f), thickness = 1.dp)
-    }
-}
-
-@Composable
-fun CourseTag(text: String) {
-    Box(
-        modifier = Modifier
-            .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 9.sp,
-            color = Color.Gray,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
