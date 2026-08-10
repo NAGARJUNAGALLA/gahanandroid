@@ -1,12 +1,11 @@
 package com.jcv.mocktests.ui
 
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,7 +24,6 @@ import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
 
-// Matching the "View Series" blue from the image
 private val ViewSeriesBlue = Color(0xFF2962FF)
 
 @Composable
@@ -32,109 +31,89 @@ fun AuthScreen(
     onNavigateToHome: () -> Unit,
     onNavigateToSignup: () -> Unit
 ) {
-    var identifier by remember { mutableStateOf("") } 
+    var email by remember { mutableStateOf("") } 
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    
+    // NEW: State for Forgot Password Dialog
+    var showResetDialog by remember { mutableStateOf(false) }
+    var resetEmail by remember { mutableStateOf("") }
+    var isSendingReset by remember { mutableStateOf(false) }
 
-    // UI State for the custom biometric dialog - UPDATED TO FALSE INITIALLY
-    var showAuthDialog by remember { mutableStateOf(false) } 
-    var biometricError by remember { mutableStateOf<String?>(null) }
-
-    val auth = FirebaseAuth.getInstance()
+    val auth = remember { FirebaseAuth.getInstance() }
     val context = LocalContext.current
 
-    // THE CUSTOM BIOMETRIC DIALOG (Now acts as 2FA after password success)
-    if (showAuthDialog) {
+    // ==========================================
+    // FORGOT PASSWORD DIALOG
+    // ==========================================
+    if (showResetDialog) {
         AlertDialog(
-            onDismissRequest = { showAuthDialog = false },
+            onDismissRequest = { if (!isSendingReset) showResetDialog = false },
             containerColor = Color.White,
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = "Warning",
-                        tint = Color(0xFFFFB300), 
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("User Authentication", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.Black)
-                }
+                Text("Reset Password", fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
             },
             text = {
-                Text("Select a method to login", fontSize = 16.sp, color = Color.Black, modifier = Modifier.padding(start = 44.dp))
+                Column {
+                    Text("Enter your email address and we'll send you a link to reset your password.", fontSize = 14.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = { resetEmail = it },
+                        label = { Text("Email Address") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
+                    )
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        showAuthDialog = false
-                        
-                        val activity = context as? androidx.fragment.app.FragmentActivity
-                        if (activity != null) {
-                            val executor = androidx.core.content.ContextCompat.getMainExecutor(activity)
-                            val biometricPrompt = androidx.biometric.BiometricPrompt(
-                                activity, 
-                                executor,
-                                object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
-                                    override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
-                                        super.onAuthenticationSucceeded(result)
-                                        // BIOMETRIC SUCCESS! Navigate to home
-                                        onNavigateToHome()
-                                    }
-
-                                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                                        super.onAuthenticationError(errorCode, errString)
-                                        biometricError = errString.toString()
-                                        // If biometric fails or is cancelled, you can decide whether to block them 
-                                        // or let them in since they already provided a valid password. 
-                                        // Currently, it just shows an error toast.
-                                    }
-                                }
-                            )
-
-                            val promptInfo = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
-                                .setTitle("Verify your identity")
-                                .setSubtitle("Confirm it's you to continue")
-                                .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-                                .build()
-
-                            biometricPrompt.authenticate(promptInfo)
-                        } else {
-                            biometricError = "Biometric authentication is not supported on this device."
+                        if (resetEmail.isBlank()) {
+                            Toast.makeText(context, "Please enter your email", Toast.LENGTH_SHORT).show()
+                            return@Button
                         }
+                        isSendingReset = true
+                        auth.sendPasswordResetEmail(resetEmail.trim())
+                            .addOnCompleteListener { task ->
+                                isSendingReset = false
+                                if (task.isSuccessful) {
+                                    Toast.makeText(context, "Password reset link sent to your email!", Toast.LENGTH_LONG).show()
+                                    showResetDialog = false
+                                } else {
+                                    Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8BC34A)), 
-                    shape = RoundedCornerShape(8.dp)
+                    enabled = !isSendingReset,
+                    colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
                 ) {
-                    Text("Use Screen Lock", color = Color.White, fontWeight = FontWeight.Bold)
+                    if (isSendingReset) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Send Link")
+                    }
                 }
             },
             dismissButton = {
-                OutlinedButton(
-                    onClick = { 
-                        showAuthDialog = false
-                        // Since they already validated their password successfully, 
-                        // clicking this allows them to bypass the fingerprint step.
-                        onNavigateToHome() 
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, Color.Black)
+                TextButton(
+                    onClick = { showResetDialog = false },
+                    enabled = !isSendingReset
                 ) {
-                    Text("Use login", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Cancel", color = Color.Gray)
                 }
             }
         )
     }
 
-    biometricError?.let {
-        LaunchedEffect(it) {
-            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            biometricError = null
-        }
-    }
-
+    // ==========================================
+    // MAIN LOGIN UI
+    // ==========================================
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -142,28 +121,22 @@ fun AuthScreen(
         Image(
             painter = painterResource(id = R.drawable.logo),
             contentDescription = "App Logo",
-            modifier = Modifier
-                .size(120.dp)
-                .padding(bottom = 16.dp)
+            modifier = Modifier.size(120.dp).padding(bottom = 16.dp)
         )
 
-        Text(
-            text = "JCV MOCK TESTS", 
-            style = MaterialTheme.typography.headlineLarge, 
-            color = ViewSeriesBlue,
-            fontWeight = FontWeight.Bold
-        )
+        Text("JCV MOCK TESTS", style = MaterialTheme.typography.headlineLarge, color = ViewSeriesBlue, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Welcome back! Please login.", color = Color.Gray, fontSize = 14.sp)
         Spacer(modifier = Modifier.height(32.dp))
 
         OutlinedTextField(
-            value = identifier,
-            onValueChange = { identifier = it },
-            label = { Text("Mobile Number or Email") }, 
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Email Address") }, 
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = ViewSeriesBlue,
-                focusedLabelColor = ViewSeriesBlue
-            )
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -173,49 +146,63 @@ fun AuthScreen(
             label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = ViewSeriesBlue,
-                focusedLabelColor = ViewSeriesBlue
-            )
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
         )
+        
+        // NEW: Forgot Password Text
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Text(
+                text = "Forgot Password?",
+                color = ViewSeriesBlue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .clickable { 
+                        resetEmail = email // Auto-fill if they already typed it
+                        showResetDialog = true 
+                    }
+                    .padding(4.dp)
+            )
+        }
+        
         Spacer(modifier = Modifier.height(24.dp))
 
         if (errorMessage != null) {
-            Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
+            Text(errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(8.dp))
         }
 
         Button(
             onClick = {
-                isLoading = true
-                val trimmedIdentifier = identifier.trim()
-                
-                val finalAuthEmail = if (trimmedIdentifier.contains("@")) {
-                    trimmedIdentifier
-                } else {
-                    "$trimmedIdentifier@jcv.com"
+                if (email.isBlank() || password.isBlank()) {
+                    errorMessage = "Please enter both email and password"
+                    return@Button
                 }
 
-                // VALIDATE CREDENTIALS FIRST
-                auth.signInWithEmailAndPassword(finalAuthEmail, password)
+                isLoading = true
+                
+                auth.signInWithEmailAndPassword(email.trim(), password)
                     .addOnCompleteListener { task ->
-                        isLoading = false
                         if (task.isSuccessful) {
-                            
-                            // ==================================================
-                            // NEW: SINGLE DEVICE LOGIN ENFORCEMENT
-                            // ==================================================
                             val uid = auth.currentUser?.uid
                             if (uid != null) {
+                                // SINGLE DEVICE ENFORCEMENT
                                 val deviceId = LocalStorage(context).getOrCreateDeviceId()
                                 FirebaseFirestore.getInstance().collection("users").document(uid)
                                     .set(mapOf("deviceId" to deviceId), SetOptions.merge())
+                                    .addOnSuccessListener {
+                                        isLoading = false
+                                        Toast.makeText(context, "Login Successful", Toast.LENGTH_SHORT).show()
+                                        onNavigateToHome()
+                                    }
+                            } else {
+                                isLoading = false
+                                onNavigateToHome()
                             }
-                            // ==================================================
-                            
-                            // CREDENTIALS ARE VALID -> TRIGGER THE AUTH DIALOG
-                            showAuthDialog = true
                         } else {
+                            isLoading = false
                             errorMessage = task.exception?.message ?: "Login Failed"
                         }
                     }
@@ -228,7 +215,7 @@ fun AuthScreen(
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
             } else {
-                Text("Log in", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Log In", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
         
