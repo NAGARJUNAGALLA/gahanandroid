@@ -38,6 +38,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.R
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.BorderStroke
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES }
 
