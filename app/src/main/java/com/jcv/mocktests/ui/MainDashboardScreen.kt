@@ -1,8 +1,10 @@
 package com.jcv.mocktests.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.BackHandler // NEW IMPORT
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -75,28 +77,24 @@ fun MainDashboardScreen(
     onNavigateToCourse: (String) -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
-    // ==========================================
-    // 1. DYNAMIC THEME DEFINITIONS
-    // ==========================================
     val darkColors = darkColorScheme(
-        background = Color(0xFF0F172A),       // Deep Dark Blue/Gray for App Background
-        surface = Color(0xFF1E293B),          // Slightly lighter for Cards
-        onBackground = Color(0xFFF8FAFC),     // White text for Titles
-        onSurface = Color(0xFFF8FAFC),        // White text for Cards
-        surfaceVariant = Color(0xFF334155),   // For Tags and Dividers
-        onSurfaceVariant = Color(0xFF94A3B8)  // Gray Sub-text
+        background = Color(0xFF0F172A),       
+        surface = Color(0xFF1E293B),          
+        onBackground = Color(0xFFF8FAFC),     
+        onSurface = Color(0xFFF8FAFC),        
+        surfaceVariant = Color(0xFF334155),   
+        onSurfaceVariant = Color(0xFF94A3B8)  
     )
     
     val lightColors = lightColorScheme(
-        background = Color(0xFFF8FAFC),       // Very light gray
-        surface = Color.White,                // White Cards
-        onBackground = Color(0xFF0F172A),     // Black/Dark Blue text
-        onSurface = Color(0xFF0F172A),        // Black text
-        surfaceVariant = Color(0xFFF1F5F9),   // For Tags and Dividers
-        onSurfaceVariant = Color(0xFF64748B)  // Gray Sub-text
+        background = Color(0xFFF8FAFC),       
+        surface = Color.White,                
+        onBackground = Color(0xFF0F172A),     
+        onSurface = Color(0xFF0F172A),        
+        surfaceVariant = Color(0xFFF1F5F9),   
+        onSurfaceVariant = Color(0xFF64748B)  
     )
 
-    // Wrap the entire screen in the Dynamic Theme
     MaterialTheme(colorScheme = if (isDarkMode) darkColors else lightColors) {
         
         var selectedTab by remember(initialTab) {
@@ -116,6 +114,7 @@ fun MainDashboardScreen(
         }
 
         val context = LocalContext.current
+        val activity = context as? Activity // Needed to exit the app
         val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
         val localStorage = remember { LocalStorage(context) }
         val localDeviceId = remember { localStorage.getOrCreateDeviceId() }
@@ -131,6 +130,65 @@ fun MainDashboardScreen(
         var approvedSheetIds by remember { mutableStateOf<List<String>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
         var streakCount by remember { mutableIntStateOf(0) }
+        
+        // NEW: Exit Dialog State
+        var showExitDialog by remember { mutableStateOf(false) }
+
+        // =========================================================
+        // NEW: BACK BUTTON HANDLER LOGIC
+        // =========================================================
+        BackHandler(enabled = true) {
+            if (drawerState.isOpen) {
+                scope.launch { drawerState.close() }
+            } else if (selectedTab != BottomTab.HOME) {
+                selectedTab = BottomTab.HOME
+            } else {
+                // If drawer is closed and we are on the Home Tab, show the exit prompt!
+                showExitDialog = true
+            }
+        }
+
+        // =========================================================
+        // NEW: EXIT CONFIRMATION DIALOG UI
+        // =========================================================
+        if (showExitDialog) {
+            AlertDialog(
+                onDismissRequest = { showExitDialog = false },
+                containerColor = MaterialTheme.colorScheme.surface,
+                title = {
+                    Text(
+                        text = "Exit App",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to exit JCV Mock Tests?",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showExitDialog = false
+                            activity?.finish() // Closes the app safely
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)) // Red button
+                    ) {
+                        Text("Yes, Exit", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = { showExitDialog = false },
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant)
+                    ) {
+                        Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            )
+        }
 
         LaunchedEffect(auth.currentUser?.uid) {
             val uid = auth.currentUser?.uid
@@ -623,7 +681,6 @@ fun PastelCategoryCard(
     backgroundColor: Color,
     onClick: () -> Unit
 ) {
-    // We intentionally keep Pastel cards brightly colored regardless of theme
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
@@ -649,7 +706,7 @@ fun PastelCategoryCard(
             
             Text(
                 text = title,
-                color = Color.Black, // Dark text is necessary on light pastel backgrounds
+                color = Color.Black, 
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.End,
@@ -690,9 +747,6 @@ fun CourseGridScreen(
     }
 }
 
-// ---------------------------------------------------------------------------
-// HYBRID CARD VIEW (Theme Aware)
-// ---------------------------------------------------------------------------
 @Composable
 fun CourseCardView(
     course: CourseModel, 
