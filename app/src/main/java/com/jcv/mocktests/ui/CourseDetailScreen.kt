@@ -36,9 +36,9 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage
 import java.net.URLEncoder
+import androidx.compose.foundation.BorderStroke
 
 val DarkHeaderColor = Color(0xFF181E2F)
-val ViewSeriesBlue = Color(0xFF1E90FF)
 
 data class TestSummary(
     val name: String,
