@@ -51,8 +51,7 @@ import kotlinx.coroutines.launch
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES, STUDY_MATERIAL }
 
-private val ViewSeriesBlue = Color(0xFF2962FF)
-private val PrimaryGradient = Brush.horizontalGradient(listOf(Color(0xFF1565C0), ViewSeriesBlue))
+
 
 private val PastelColors = listOf(
     Color(0xFFFFF3E0), Color(0xFFFCE4EC), Color(0xFFF0F4C3), 
@@ -96,6 +95,8 @@ fun MainDashboardScreen(
         }
         
         val context = LocalContext.current
+        val ViewSeriesBlue = MaterialTheme.colorScheme.primary
+        val PrimaryGradient = Brush.horizontalGradient(listOf(ViewSeriesBlue.copy(alpha = 0.75f), ViewSeriesBlue))
         val activity = context as? Activity
         val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
         val localStorage = remember { LocalStorage(context) }
