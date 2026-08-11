@@ -309,7 +309,7 @@ fun LocalStudyMaterialScreen() {
                     domStorageEnabled = true
                     allowFileAccess = true 
                 }
-                loadUrl("file:///android_asset/study_material.html")
+                loadUrl("https://jcv-mock-tests.web.app/studymaterial/")
             }
         }
     )
