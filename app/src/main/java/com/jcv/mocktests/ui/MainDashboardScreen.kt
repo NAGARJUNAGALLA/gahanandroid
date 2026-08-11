@@ -3,6 +3,7 @@ package com.jcv.mocktests.ui
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -164,6 +165,8 @@ fun MainDashboardScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // ONLY allows swipe-to-close. Swipe-to-open from the edge is completely disabled!
+        gesturesEnabled = drawerState.isOpen, 
         drawerContent = {
             ModalDrawerSheet(modifier = Modifier.width(300.dp), drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -183,14 +186,6 @@ fun MainDashboardScreen(
                         label = { Text("Home Dashboard", fontWeight = FontWeight.Bold) },
                         selected = selectedTab == BottomTab.HOME,
                         onClick = { selectedTab = BottomTab.HOME; scope.launch { drawerState.close() } },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
-                    )
-                    
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Info, contentDescription = "Study Material", tint = themePrimaryColor) },
-                        label = { Text("Study Material", fontWeight = FontWeight.Bold) },
-                        selected = selectedTab == BottomTab.STUDY_MATERIAL,
-                        onClick = { selectedTab = BottomTab.STUDY_MATERIAL; scope.launch { drawerState.close() } },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
                     )
 
@@ -254,7 +249,6 @@ fun MainDashboardScreen(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
                             }
-                            // REMOVED THE THEME TOGGLE ICON BUTTON FROM HERE
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                     )
@@ -303,6 +297,11 @@ fun LocalStudyMaterialScreen() {
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
             WebView(context).apply {
+                // FIXED: Setting LayoutParams explicitly gives Compose the dimensions it needs to smoothly calculate scroll mechanics
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
                 webViewClient = WebViewClient()
                 settings.apply {
                     javaScriptEnabled = true
