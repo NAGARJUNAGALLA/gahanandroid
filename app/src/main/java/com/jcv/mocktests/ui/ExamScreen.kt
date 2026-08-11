@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -45,11 +46,10 @@ import com.jcv.mocktests.utils.LocalStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-val JcvGradient = Brush.horizontalGradient(listOf(Color(0xFF104E8B), Color(0xFF1E90FF)))
 val StatusAnsweredColor = Color(0xFF27AE60)
 val StatusNotAnsweredColor = Color(0xFFE74C3C)
 val StatusMarkedColor = Color(0xFF9B59B6)
-val StatusNotVisitedColor = Color(0xFFFFFFFF)
+val StatusNotVisitedColor = Color.Transparent // Changed for dark mode compatibility
 
 enum class ExamStep { INSTRUCTIONS, EXAM, SUBMIT_CONFIRM, RESULT }
 
@@ -59,7 +59,6 @@ data class ExamSection(
     val globalStartIndex: Int
 )
 
-// NEW: Data class for Subject-Wise Analytics
 data class SectionStat(
     val name: String, 
     val correct: Int, 
@@ -76,6 +75,14 @@ fun ExamScreen(
     onNavigateBack: () -> Unit,
     onReviewTest: () -> Unit = {}
 ) {
+    // DYNAMIC GLOBAL THEME INTEGRATION
+    val themePrimaryColor = MaterialTheme.colorScheme.primary
+    val primaryGradient = Brush.horizontalGradient(listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor))
+    
+    // Dynamic Hex colors for the WebView Math Text (Adapts to Dark Mode!)
+    val defaultTextColorHex = String.format("#%06X", 0xFFFFFF and MaterialTheme.colorScheme.onSurface.toArgb())
+    val selectedTextColorHex = String.format("#%06X", 0xFFFFFF and themePrimaryColor.toArgb())
+
     val context = LocalContext.current
     val localStorage = remember { LocalStorage(context) }
     val prefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) }
@@ -83,14 +90,9 @@ fun ExamScreen(
 
     var sections by remember { mutableStateOf<List<ExamSection>>(emptyList()) }
     val questionStates = remember { mutableStateListOf<MutableList<QuestionState>>() }
-    
-    // NEW: State for tracking Doubt Bookmarks
     val bookmarkedQuestions = remember { mutableStateListOf<Pair<Int, Int>>() }
-    
-    // NEW: State for Subject-wise Accuracy
     var sectionStats by remember { mutableStateOf<List<SectionStat>>(emptyList()) }
     
-    // UI State Management
     var examStep by remember { mutableStateOf(if (isReviewMode) ExamStep.EXAM else ExamStep.INSTRUCTIONS) }
     var currentSecIndex by remember { mutableIntStateOf(0) }
     var currentQIndex by remember { mutableIntStateOf(0) }
@@ -99,13 +101,11 @@ fun ExamScreen(
     var isLoading by remember { mutableStateOf(true) }
     var hasAgreedToRules by remember { mutableStateOf(false) }
     
-    // Marking Scheme States
     var positiveMark by remember { mutableFloatStateOf(1f) }
     var negativeMark by remember { mutableFloatStateOf(0f) }
     var isPosDropdownExpanded by remember { mutableStateOf(false) }
     var isNegDropdownExpanded by remember { mutableStateOf(false) }
 
-    // Result States
     var finalResultScore by remember { mutableFloatStateOf(0f) }
     var finalMaxScore by remember { mutableFloatStateOf(0f) }
     var totalCorrect by remember { mutableIntStateOf(0) }
@@ -120,14 +120,10 @@ fun ExamScreen(
     val userName = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Student"
     val userIdentifier = currentUser?.email ?: currentUser?.uid ?: "JCV-USER"
 
-    // Helper function to save progress & bookmarks locally
     fun saveProgressLocally() {
         if (isReviewMode || sections.isEmpty()) return
-        
         val flatStates = questionStates.flatten()
         val statesString = flatStates.joinToString(";") { "${it.status.name},${it.selectedOption ?: -1}" }
-        
-        // NEW: Save Bookmarks
         val bmString = bookmarkedQuestions.joinToString(";") { "${it.first},${it.second}" }
         
         prefs.edit()
@@ -171,7 +167,6 @@ fun ExamScreen(
                     val savedBookmarksStr = prefs.getString("${prefKey}_bookmarks", "")
                     val savedTime = prefs.getInt("${prefKey}_time", totalQuestions * 60)
                     
-                    // NEW: Load Bookmarks
                     if (!savedBookmarksStr.isNullOrBlank()) {
                         savedBookmarksStr.split(";").forEach {
                             val parts = it.split(",")
@@ -259,31 +254,35 @@ fun ExamScreen(
     }
 
     if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) { 
+            CircularProgressIndicator(color = themePrimaryColor) 
+        }
         return
     }
 
     if (examStep == ExamStep.INSTRUCTIONS) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(testName, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, tint = Color.White, contentDescription = "Back") }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF104E8B))
-                )
+                Box(modifier = Modifier.fillMaxWidth().background(primaryGradient)) {
+                    TopAppBar(
+                        title = { Text(testName, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        navigationIcon = {
+                            IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, tint = Color.White, contentDescription = "Back") }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    )
+                }
             },
             bottomBar = {
-                Surface(shadowElevation = 8.dp) {
-                    Column(modifier = Modifier.fillMaxWidth().background(Color.White).padding(16.dp)) {
+                Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = hasAgreedToRules, 
                                 onCheckedChange = { hasAgreedToRules = it },
-                                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF1E90FF))
+                                colors = CheckboxDefaults.colors(checkedColor = themePrimaryColor, uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant)
                             )
-                            Text("Choose Language: English | I have read and understood the instructions.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Choose Language: English | I have read and understood the instructions.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         }
                         
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
@@ -297,11 +296,11 @@ fun ExamScreen(
                             DropdownMenu(
                                 expanded = isPosDropdownExpanded,
                                 onDismissRequest = { isPosDropdownExpanded = false },
-                                modifier = Modifier.fillMaxWidth(0.9f).background(Color.White)
+                                modifier = Modifier.fillMaxWidth(0.9f).background(MaterialTheme.colorScheme.surface)
                             ) {
                                 listOf(1f, 2f, 3f, 4f).forEach { mark ->
                                     DropdownMenuItem(
-                                        text = { Text("+$mark Marks ${if(mark==4f) "(IIT JEE)" else if(mark==2f) "(SSC CGL)" else ""}") },
+                                        text = { Text("+$mark Marks ${if(mark==4f) "(IIT JEE)" else if(mark==2f) "(SSC CGL)" else ""}", color = MaterialTheme.colorScheme.onSurface) },
                                         onClick = { positiveMark = mark; isPosDropdownExpanded = false }
                                     )
                                 }
@@ -319,11 +318,11 @@ fun ExamScreen(
                             DropdownMenu(
                                 expanded = isNegDropdownExpanded,
                                 onDismissRequest = { isNegDropdownExpanded = false },
-                                modifier = Modifier.fillMaxWidth(0.9f).background(Color.White)
+                                modifier = Modifier.fillMaxWidth(0.9f).background(MaterialTheme.colorScheme.surface)
                             ) {
                                 listOf(0f, 0.25f, 0.33f, 0.5f, 1f).forEach { mark ->
                                     DropdownMenuItem(
-                                        text = { Text("-$mark Marks ${if(mark==0f) "(No Negative Marking)" else if(mark==0.5f) "(SSC CGL)" else if(mark==1f) "(IIT JEE)" else ""}") },
+                                        text = { Text("-$mark Marks ${if(mark==0f) "(No Negative Marking)" else if(mark==0.5f) "(SSC CGL)" else if(mark==1f) "(IIT JEE)" else ""}", color = MaterialTheme.colorScheme.onSurface) },
                                         onClick = { negativeMark = mark; isNegDropdownExpanded = false }
                                     )
                                 }
@@ -340,7 +339,8 @@ fun ExamScreen(
                             }, 
                             enabled = hasAgreedToRules,
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
                         ) {
                             Text(if (timeLeft < totalQuestions * 60) "Resume Test" else "Start Test", fontWeight = FontWeight.Bold)
                         }
@@ -351,69 +351,71 @@ fun ExamScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
                     .padding(padding)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                Text("Please read the following instructions carefully", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp).fillMaxWidth(), textAlign = TextAlign.Center)
-                Text("Total Number of Questions: $totalQuestions", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text("Total Time Available: ${totalQuestions} Mins", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(bottom = 16.dp))
+                Text("Please read the following instructions carefully", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(bottom = 16.dp).fillMaxWidth(), textAlign = TextAlign.Center)
+                Text("Total Number of Questions: $totalQuestions", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text("Total Time Available: ${totalQuestions} Mins", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = 16.dp))
                 
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                    border = BorderStroke(1.dp, Color.LightGray),
-                    color = Color.White
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(8.dp)
                 ){
                     Column {
-                        Row(modifier = Modifier.background(Color(0xFFF3F4F6)).padding(8.dp)) {
-                            Text("Section Name", modifier = Modifier.weight(1.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            Text("Qs", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
-                            Text("Max", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
-                            Text("Marks", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
-                            Text("Neg", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Row(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp)) {
+                            Text("Section Name", modifier = Modifier.weight(1.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Qs", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Max", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Marks", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
+                            Text("Neg", modifier = Modifier.weight(0.5f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
                         }
-                        Divider(color = Color.LightGray)
+                        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
                         sections.forEach { sec ->
                             Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(sec.name, modifier = Modifier.weight(1.5f), fontSize = 12.sp)
-                                Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
-                                Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
-                                Text("1", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
-                                Text("0", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text(sec.name, modifier = Modifier.weight(1.5f), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                                Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
+                                Text("${sec.questions.size}", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
+                                Text("1", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
+                                Text("0", modifier = Modifier.weight(0.5f), fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface)
                             }
-                            Divider(color = Color.LightGray)
+                            Divider(color = MaterialTheme.colorScheme.surfaceVariant)
                         }
                     }
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 24.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(28.dp).background(StatusNotVisitedColor, RoundedCornerShape(4.dp)).border(1.dp, Color.Gray, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) { Text("1", fontSize = 12.sp) }
-                        Text(" You have not visited the question yet.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+                        Box(modifier = Modifier.size(28.dp).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp)).border(1.dp, Color.Gray, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) { Text("1", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface) }
+                        Text(" You have not visited the question yet.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(28.dp).background(StatusNotAnsweredColor, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)), contentAlignment = Alignment.Center) { Text("3", color = Color.White, fontSize = 12.sp) }
-                        Text(" You have not answered the question.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+                        Text(" You have not answered the question.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(28.dp).background(StatusAnsweredColor, RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomStart = 8.dp, bottomEnd = 8.dp)), contentAlignment = Alignment.Center) { Text("5", color = Color.White, fontSize = 12.sp) }
-                        Text(" You have answered the question.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+                        Text(" You have answered the question.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(28.dp).background(StatusMarkedColor, CircleShape), contentAlignment = Alignment.Center) { Text("7", color = Color.White, fontSize = 12.sp) }
-                        Text(" You have NOT answered the question, but have marked the question for review.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+                        Text(" You have NOT answered the question, but marked it for review.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 8.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(28.dp).background(StatusMarkedColor, CircleShape), contentAlignment = Alignment.Center) { 
                             Text("9", color = Color.White, fontSize = 12.sp)
                             Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp).size(12.dp).background(Color(0xFF2ECC71), CircleShape).border(1.dp, Color.White, CircleShape))
                         }
-                        Text(" You have answered the question, but marked it for review.", fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
+                        Text(" You have answered the question, but marked it for review.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
                 
-                Text("Navigating to a Question:", fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
-                Text("1. Click on the question number on the palette to go to that question directly.\n2. Click on Save and Next to save answer and move forward.\n3. Click on Mark for Review and Next to save answer, mark it, and move forward.", fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
+                Text("Navigating to a Question:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, textDecoration = TextDecoration.Underline, modifier = Modifier.padding(bottom = 8.dp))
+                Text("1. Click on the question number on the palette to go to that question directly.\n2. Click on Save and Next to save answer and move forward.\n3. Click on Mark for Review and Next to save answer, mark it, and move forward.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
             }
         }
         return
@@ -422,30 +424,29 @@ fun ExamScreen(
     if (examStep == ExamStep.SUBMIT_CONFIRM) {
         val flatStates = questionStates.flatten()
         val answered = flatStates.count { it.status == QuestionStatus.ANSWERED || it.status == QuestionStatus.ANSWERED_AND_MARKED }
-        val marked = flatStates.count { it.status == QuestionStatus.MARKED_FOR_REVIEW }
         val notAnswered = flatStates.count { it.status == QuestionStatus.NOT_ANSWERED }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
             Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth(0.9f).padding(16.dp)
             ) {
                 Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Submit Examination", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color(0xFF104E8B))
+                    Text("Submit Examination", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = themePrimaryColor)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Are you sure you want to submit the exam?", textAlign = TextAlign.Center, color = Color.DarkGray)
+                    Text("Are you sure you want to submit the exam?", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(answered.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusAnsweredColor)
-                            Text("Answered", fontSize = 10.sp, color = Color.Gray)
+                            Text("Answered", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(notAnswered.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp, color = StatusNotAnsweredColor)
-                            Text("Skipped", fontSize = 10.sp, color = Color.Gray)
+                            Text("Skipped", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
 
@@ -454,23 +455,21 @@ fun ExamScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(
                             onClick = { examStep = ExamStep.EXAM },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)
                         ) { Text("Return") }
                         
                         Button(
                             onClick = {
                                 saveProgressLocally()
-                                
                                 var correctAnswers = 0
                                 var wrongAnswers = 0
                                 var skippedAnswers = 0
-                                
-                                // NEW: Calculate Subject-wise accuracy
                                 val sStats = mutableListOf<SectionStat>()
                                 
                                 sections.forEachIndexed { sIdx, section ->
                                     var secCorrect = 0
-                                    
                                     section.questions.forEachIndexed { qIdx, q ->
                                         val selected = questionStates[sIdx][qIdx].selectedOption
                                         if (selected == null || selected == -1) {
@@ -482,13 +481,11 @@ fun ExamScreen(
                                             wrongAnswers++
                                         }
                                     }
-                                    
                                     val acc = if (section.questions.isNotEmpty()) (secCorrect.toFloat() / section.questions.size) * 100 else 0f
                                     sStats.add(SectionStat(section.name, secCorrect, section.questions.size, acc))
                                 }
                                 
                                 sectionStats = sStats
-                                
                                 val posScore = correctAnswers * positiveMark
                                 val negScore = wrongAnswers * negativeMark
                                 
@@ -499,7 +496,7 @@ fun ExamScreen(
                                 totalIncorrect = wrongAnswers
                                 totalSkipped = skippedAnswers
                                 
-                                localStorage.saveTestScore(courseId, testName, finalResultScore.toFloat(), finalMaxScore.toFloat())
+                                localStorage.saveTestScore(courseId, testName, finalResultScore, finalMaxScore)
                                 
                                 com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
                                     putString("test_name", testName)
@@ -509,7 +506,8 @@ fun ExamScreen(
                                 examStep = ExamStep.RESULT
                             },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
                         ) { Text("Yes, Submit") }
                     }
                 }
@@ -521,20 +519,22 @@ fun ExamScreen(
     if (examStep == ExamStep.RESULT) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text("Exam Results", color = Color.White) },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.Close, tint = Color.White, contentDescription = "Close") }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF104E8B))
-                )
+                Box(modifier = Modifier.fillMaxWidth().background(primaryGradient)) {
+                    TopAppBar(
+                        title = { Text("Exam Results", color = Color.White) },
+                        navigationIcon = {
+                            IconButton(onClick = onNavigateBack) { Icon(Icons.Default.Close, tint = Color.White, contentDescription = "Close") }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    )
+                }
             }
         ) { padding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .background(Color(0xFFF3F4F6))
+                    .background(MaterialTheme.colorScheme.background)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -542,23 +542,24 @@ fun ExamScreen(
                 
                 Card(
                     modifier = Modifier.fillMaxWidth(0.9f).padding(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    shape = RoundedCornerShape(24.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(testName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, textAlign = TextAlign.Center)
+                        Text(testName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         Box(
                             contentAlignment = Alignment.Center,
-                            modifier = Modifier.size(120.dp).background(Color(0xFFEFF6FF), CircleShape).border(4.dp, Color(0xFF1E90FF), CircleShape)
+                            modifier = Modifier.size(120.dp).background(themePrimaryColor.copy(alpha = 0.1f), CircleShape).border(4.dp, themePrimaryColor, CircleShape)
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("$finalResultScore", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color(0xFF104E8B))
-                                Text("out of $finalMaxScore", fontSize = 14.sp, color = Color.Gray)
+                                Text("$finalResultScore", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = themePrimaryColor)
+                                Text("out of $finalMaxScore", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -577,15 +578,15 @@ fun ExamScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // NEW: Subject-Wise Accuracy Card
                 if (sectionStats.isNotEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(0.9f),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Subject-wise Accuracy", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF104E8B), modifier = Modifier.padding(bottom = 12.dp))
+                            Text("Subject-wise Accuracy", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = themePrimaryColor, modifier = Modifier.padding(bottom = 12.dp))
                             
                             sectionStats.forEach { stat ->
                                 Row(
@@ -597,6 +598,7 @@ fun ExamScreen(
                                         modifier = Modifier.weight(1.2f), 
                                         fontSize = 12.sp, 
                                         fontWeight = FontWeight.SemiBold, 
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1, 
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -605,7 +607,7 @@ fun ExamScreen(
                                         progress = stat.accuracy / 100f,
                                         modifier = Modifier.weight(2f).height(8.dp).clip(RoundedCornerShape(4.dp)),
                                         color = if (stat.accuracy >= 70f) Color(0xFF4CAF50) else if (stat.accuracy >= 40f) Color(0xFFFF9800) else Color(0xFFF44336),
-                                        trackColor = Color(0xFFF3F4F6)
+                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
                                     
                                     Text(
@@ -613,6 +615,7 @@ fun ExamScreen(
                                         modifier = Modifier.width(40.dp), 
                                         textAlign = TextAlign.End, 
                                         fontSize = 12.sp, 
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -626,20 +629,19 @@ fun ExamScreen(
                 Button(
                     onClick = onReviewTest,
                     modifier = Modifier.fillMaxWidth(0.9f).height(50.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF)),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor),
+                    shape = RoundedCornerShape(50)
                 ) {
                     Icon(Icons.Default.Search, contentDescription = null, tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Review Answers", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text("Review Answers", fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 
-                // NEW: Instruction for Bookmarks
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "💡 Tip: In Review Mode, open the Palette to quickly find your ⭐ Bookmarked Doubt Questions.",
                     fontSize = 11.sp,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 24.dp)
                 )
@@ -649,8 +651,8 @@ fun ExamScreen(
                 OutlinedButton(
                     onClick = onNavigateBack,
                     modifier = Modifier.fillMaxWidth(0.9f).height(50.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF104E8B)),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor),
+                    shape = RoundedCornerShape(50)
                 ) {
                     Text("Return to Course", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
@@ -673,22 +675,22 @@ fun ExamScreen(
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     ModalDrawerSheet(
                         modifier = Modifier.width(320.dp),
-                        drawerContainerColor = Color.White,
+                        drawerContainerColor = MaterialTheme.colorScheme.surface,
                         drawerShape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp)
                     ) {
-                        Column(modifier = Modifier.fillMaxHeight().background(Color.White)) {
+                        Column(modifier = Modifier.fillMaxHeight().background(MaterialTheme.colorScheme.surface)) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(
-                                    modifier = Modifier.size(50.dp).background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp)),
+                                    modifier = Modifier.size(50.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)),
                                     contentAlignment = Alignment.Center
                                 ) { Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(32.dp)) }
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
-                                    Text(userName, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
-                                    Text(userIdentifier, color = Color.Gray, fontSize = 12.sp)
+                                    Text(userName, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(userIdentifier, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                                 }
                             }
-                            Divider(color = Color.LightGray.copy(alpha = 0.5f))
+                            Divider(color = MaterialTheme.colorScheme.surfaceVariant)
 
                             Column(modifier = Modifier.padding(16.dp)) {
                                 if (!isReviewMode) {
@@ -705,7 +707,7 @@ fun ExamScreen(
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        LegendItem(notVisited, "Not Visited", StatusNotVisitedColor, RoundedCornerShape(4.dp))
+                                        LegendItem(notVisited, "Not Visited", MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp), isSurfaceColor = true)
                                         LegendItem(marked, "Marked", StatusMarkedColor, CircleShape)
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -723,21 +725,21 @@ fun ExamScreen(
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         LegendItem(correct, "Correct", StatusAnsweredColor, RoundedCornerShape(4.dp))
                                         LegendItem(incorrect, "Incorrect", StatusNotAnsweredColor, RoundedCornerShape(4.dp))
-                                        LegendItem(skipped, "Skipped", StatusNotVisitedColor, RoundedCornerShape(4.dp))
+                                        LegendItem(skipped, "Skipped", MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp), isSurfaceColor = true)
                                     }
                                 }
                             }
 
-                            Column(modifier = Modifier.weight(1f).background(Color(0xFFF4F7FB)).padding(16.dp)) {
+                            Column(modifier = Modifier.weight(1f).background(MaterialTheme.colorScheme.background).padding(16.dp)) {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
                                         text = "${currentSection.name} Palette",
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                        textAlign = TextAlign.Center, color = Color(0xFF104E8B), fontWeight = FontWeight.Bold, fontSize = 14.sp
+                                        textAlign = TextAlign.Center, color = themePrimaryColor, fontWeight = FontWeight.Bold, fontSize = 14.sp
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -756,7 +758,7 @@ fun ExamScreen(
                                             else -> RoundedCornerShape(4.dp)
                                         }
                                         val color = if (isReviewMode) {
-                                            if (state.selectedOption == null) Color.White
+                                            if (state.selectedOption == null) MaterialTheme.colorScheme.surface
                                             else if (state.selectedOption == currentSection.questions[idx].correct) StatusAnsweredColor
                                             else StatusNotAnsweredColor
                                         } else {
@@ -764,19 +766,19 @@ fun ExamScreen(
                                                 QuestionStatus.ANSWERED -> StatusAnsweredColor
                                                 QuestionStatus.NOT_ANSWERED -> StatusNotAnsweredColor
                                                 QuestionStatus.MARKED_FOR_REVIEW, QuestionStatus.ANSWERED_AND_MARKED -> StatusMarkedColor
-                                                else -> StatusNotVisitedColor
+                                                else -> MaterialTheme.colorScheme.surface
                                             }
                                         }
 
-                                        val textColor = if (color == StatusNotVisitedColor) Color.Black else Color.White
+                                        val textColor = if (color == MaterialTheme.colorScheme.surface) MaterialTheme.colorScheme.onSurface else Color.White
                                         val isActive = currentQIndex == idx
 
                                         Box(
                                             modifier = Modifier
                                                 .aspectRatio(1f).clip(shape).background(color)
                                                 .border(
-                                                    width = if (isActive) 2.dp else if (color == StatusNotVisitedColor) 1.dp else 0.dp,
-                                                    color = if (isActive) Color.Blue else if (color == StatusNotVisitedColor) Color.LightGray else Color.Transparent,
+                                                    width = if (isActive) 2.dp else if (color == MaterialTheme.colorScheme.surface) 1.dp else 0.dp,
+                                                    color = if (isActive) themePrimaryColor else if (color == MaterialTheme.colorScheme.surface) Color.LightGray else Color.Transparent,
                                                     shape = shape
                                                 )
                                                 .clickable { 
@@ -794,7 +796,6 @@ fun ExamScreen(
                                                 Box(modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).size(6.dp).background(Color.Green, CircleShape))
                                             }
                                             
-                                            // NEW: Show a small star on the palette if bookmarked
                                             if (bookmarkedQuestions.contains(currentSecIndex to idx)) {
                                                 Icon(
                                                     Icons.Default.Star, 
@@ -816,9 +817,9 @@ fun ExamScreen(
                                             examStep = ExamStep.SUBMIT_CONFIRM
                                         },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F4F6)),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                                         shape = RoundedCornerShape(4.dp)
-                                    ) { Text("Submit Exam", color = Color.Black, fontWeight = FontWeight.Bold) }
+                                    ) { Text("Submit Exam", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) }
                                 }
                             }
                         }
@@ -833,7 +834,7 @@ fun ExamScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(if (isReviewMode) Brush.horizontalGradient(listOf(Color(0xFF104E8B), Color(0xFF104E8B))) else JcvGradient)
+                                    .background(if (isReviewMode) Brush.horizontalGradient(listOf(themePrimaryColor, themePrimaryColor)) else primaryGradient)
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -856,8 +857,8 @@ fun ExamScreen(
                                             Text(String.format("%02d:%02d", timeLeft / 60, timeLeft % 60), color = Color.White, fontWeight = FontWeight.Bold)
                                         }
                                     } else {
-                                        Button(onClick = onNavigateBack, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F3A68))) {
-                                            Text("Exit Review")
+                                        Button(onClick = onNavigateBack, colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor.copy(alpha = 0.8f))) {
+                                            Text("Exit Review", color = Color.White)
                                         }
                                     }
                                     IconButton(onClick = { scope.launch { drawerState.open() } }) {
@@ -866,7 +867,7 @@ fun ExamScreen(
                                 }
                             }
                             LazyRow(
-                                modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).padding(top = 4.dp),
+                                modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(top = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp)
                             ) {
@@ -875,10 +876,10 @@ fun ExamScreen(
                                     Box(
                                         modifier = Modifier
                                             .background(
-                                                color = if (isSelected) Color(0xFF1E90FF) else Color.White,
+                                                color = if (isSelected) themePrimaryColor else MaterialTheme.colorScheme.surface,
                                                 shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
                                             )
-                                            .border(1.dp, if (isSelected) Color(0xFF1E90FF) else Color.LightGray, RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
+                                            .border(1.dp, if (isSelected) themePrimaryColor else Color.LightGray.copy(alpha = 0.3f), RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                                             .clickable { 
                                                 currentSecIndex = idx
                                                 currentQIndex = 0
@@ -891,7 +892,7 @@ fun ExamScreen(
                                     ) {
                                         Text(
                                             text = section.name,
-                                            color = if (isSelected) Color.White else Color.DarkGray,
+                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                             fontSize = 14.sp
                                         )
@@ -902,13 +903,14 @@ fun ExamScreen(
                     },
                     bottomBar = {
                         if (!isReviewMode) {
-                            Surface(shadowElevation = 8.dp) {
-                                Column(modifier = Modifier.fillMaxWidth().background(Color(0xFFF9FAFB)).padding(8.dp)) {
+                            Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(
-                                            onClick = { moveToPrevQuestion() },
+                                            onClick = { moveToPrevQuestion() }, 
                                             modifier = Modifier.weight(1f),
-                                            enabled = !(currentSecIndex == 0 && currentQIndex == 0)
+                                            enabled = !(currentSecIndex == 0 && currentQIndex == 0),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)
                                         ) { Text("Prev") }
                                         
                                         OutlinedButton(
@@ -928,7 +930,8 @@ fun ExamScreen(
                                                 questionStates[currentSecIndex][currentQIndex] = currentState.copy(selectedOption = null, status = QuestionStatus.NOT_ANSWERED)
                                                 saveProgressLocally()
                                             },
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)
                                         ) { Text("Clear") }
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -941,33 +944,34 @@ fun ExamScreen(
                                             moveToNextQuestion()
                                         },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
-                                    ) { Text(if (currentSecIndex == sections.size - 1 && currentQIndex == currentSection.questions.size - 1) "Submit Exam" else "Save & Next") }
+                                        colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
+                                    ) { Text(if (currentSecIndex == sections.size - 1 && currentQIndex == currentSection.questions.size - 1) "Submit Exam" else "Save & Next", color = Color.White) }
                                 }
                             }
                         } else {
-                            Surface(shadowElevation = 8.dp) {
+                            Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
                                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                     OutlinedButton(
                                         onClick = { moveToPrevQuestion() }, 
-                                        enabled = !(currentSecIndex == 0 && currentQIndex == 0)
+                                        enabled = !(currentSecIndex == 0 && currentQIndex == 0),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)
                                     ) { Text("Previous") }
                                     
                                     Button(
                                         onClick = { moveToNextQuestion() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E90FF))
-                                    ) { Text(if (currentSecIndex == sections.size - 1 && currentQIndex == currentSection.questions.size - 1) "Exit" else "Next") }
+                                        colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
+                                    ) { Text(if (currentSecIndex == sections.size - 1 && currentQIndex == currentSection.questions.size - 1) "Exit" else "Next", color = Color.White) }
                                 }
                             }
                         }
                     }
                 ) { padding ->
-                    Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+                    Column(modifier = Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).border(1.dp, Color.LightGray).padding(8.dp),
+                            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Question Type: Multiple Choice", fontSize = 12.sp, color = Color.DarkGray, fontWeight = FontWeight.Bold)
+                            Text("Question Type: Multiple Choice", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Marks: +$positiveMark", fontSize = 12.sp, color = StatusAnsweredColor, fontWeight = FontWeight.Bold)
                                 Text("Negative: -$negativeMark", fontSize = 12.sp, color = StatusNotAnsweredColor, fontWeight = FontWeight.Bold)
@@ -977,17 +981,17 @@ fun ExamScreen(
                         LazyColumn(modifier = Modifier.weight(1f).padding(16.dp)) {
                             item {
                                 Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                    Text("Q ${currentSection.globalStartIndex + currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    Text("Q ${currentSection.globalStartIndex + currentQIndex + 1}. ", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
                                     
                                     Box(modifier = Modifier.weight(1f)) {
                                         MathText(
                                             text = currentQ.text, 
-                                            fontSizePx = 18
+                                            fontSizePx = 18,
+                                            textColorHex = defaultTextColorHex
                                         )
                                         Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
                                     }
                                     
-                                    // NEW: Bookmark Icon next to Question
                                     IconButton(
                                         onClick = {
                                             val pair = currentSecIndex to currentQIndex
@@ -1015,19 +1019,18 @@ fun ExamScreen(
                                 
                                 val bgColor = if (isReviewMode) {
                                     if (isCorrectAnswer) Color(0xFFF0FDF4) else if (isSelected) Color(0xFFFEF2F2) else Color.Transparent
-                                } else if (isSelected) Color(0xFFEFF6FF) else Color.Transparent
+                                } else if (isSelected) themePrimaryColor.copy(alpha = 0.1f) else Color.Transparent
                                 
                                 val borderColor = if (isReviewMode) {
-                                    if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else Color.LightGray.copy(alpha = 0.5f)
-                                } else if (isSelected) Color(0xFF60A5FA) else Color.LightGray.copy(alpha = 0.5f)
+                                    if (isCorrectAnswer) StatusAnsweredColor else if (isSelected) StatusNotAnsweredColor else MaterialTheme.colorScheme.surfaceVariant
+                                } else if (isSelected) themePrimaryColor else MaterialTheme.colorScheme.surfaceVariant
 
                                 val hexTextColor = if (isReviewMode) {
                                     if (isCorrectAnswer) "#166534" 
                                     else if (isSelected) "#991B1B" 
-                                    else "#333333"
+                                    else defaultTextColorHex
                                 } else {
-                                    if (isSelected) "#1E40AF" 
-                                    else "#333333"
+                                    if (isSelected) selectedTextColorHex else defaultTextColorHex
                                 }
 
                                 Row(
@@ -1049,7 +1052,7 @@ fun ExamScreen(
                                         else if (isSelected) StatusNotAnsweredColor
                                         else Color.LightGray
                                     } else {
-                                        if (isSelected) Color(0xFF1E90FF) else Color.Gray
+                                        if (isSelected) themePrimaryColor else Color.Gray
                                     }
 
                                     RadioButton(
@@ -1092,35 +1095,36 @@ fun ExamScreen(
 fun StatCard(modifier: Modifier = Modifier, title: String, value: String, color: Color) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = color)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(title, fontSize = 12.sp, color = Color.Gray)
+            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.ui.graphics.Shape, hasDot: Boolean = false) {
+fun LegendItem(count: Int, label: String, color: Color, shape: androidx.compose.ui.graphics.Shape, hasDot: Boolean = false, isSurfaceColor: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.width(130.dp)) {
         Box(
             modifier = Modifier
                 .size(24.dp)
                 .background(color, shape)
-                .border(width = if (color == StatusNotVisitedColor) 1.dp else 0.dp, color = Color.LightGray, shape = shape),
+                .border(width = if (isSurfaceColor) 1.dp else 0.dp, color = Color.Gray, shape = shape),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = count.toString(), fontSize = 12.sp, color = if (color == StatusNotVisitedColor) Color.Black else Color.White)
+            Text(text = count.toString(), fontSize = 12.sp, color = if (isSurfaceColor) MaterialTheme.colorScheme.onSurface else Color.White)
             if (hasDot) {
                 Box(modifier = Modifier.align(Alignment.BottomEnd).size(6.dp).background(Color.Green, CircleShape))
             }
         }
         Spacer(modifier = Modifier.width(8.dp))
-        Text(text = label, fontSize = 12.sp, color = Color(0xFF475569))
+        Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -1158,7 +1162,7 @@ fun MathText(
                     
                     -webkit-touch-callout: none; 
                     -webkit-user-select: none;   
-                    user-select: none;           
+                    user-select: none;            
                 }
                 img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 4px; pointer-events: none; }
             </style>
