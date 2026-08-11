@@ -1,5 +1,6 @@
 package com.jcv.mocktests.ui
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,18 +11,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.jcv.mocktests.AppTheme
 import com.jcv.mocktests.R 
 
@@ -31,45 +34,86 @@ fun SplashScreen(
     onThemeChange: (AppTheme) -> Unit, 
     onSplashFinished: () -> Unit
 ) {
-    // DYNAMIC THEME COLORS
     val themePrimaryColor = MaterialTheme.colorScheme.primary
     val primaryGradient = Brush.verticalGradient(
         colors = listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor)
     )
 
-    // Wait for 2.5 seconds then trigger the navigation
+    // ==========================================
+    // ANIMATION STATES
+    // ==========================================
+    val logoScale = remember { Animatable(0.5f) }
+    val logoAlpha = remember { Animatable(0f) }
+    
+    val textOffset = remember { Animatable(30f) }
+    val textAlpha = remember { Animatable(0f) }
+    
+    val loaderAlpha = remember { Animatable(0f) }
+
     LaunchedEffect(Unit) {
+        // 1. Animate Logo (Bouncy Scale & Fade)
+        launch {
+            logoAlpha.animateTo(targetValue = 1f, animationSpec = tween(durationMillis = 800))
+        }
+        launch {
+            logoScale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+            )
+        }
+
+        // 2. Animate Text (Slide Up & Fade) with a slight delay so it follows the logo
+        launch {
+            delay(300)
+            textAlpha.animateTo(targetValue = 1f, animationSpec = tween(durationMillis = 800))
+        }
+        launch {
+            delay(300)
+            textOffset.animateTo(targetValue = 0f, animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing))
+        }
+
+        // 3. Fade in the loader indicator last
+        launch {
+            delay(800)
+            loaderAlpha.animateTo(targetValue = 1f, animationSpec = tween(durationMillis = 500))
+        }
+
+        // Wait for 2.5 seconds total, then trigger the navigation to Login/Dashboard
         delay(2500)
         onSplashFinished()
     }
 
-    // ROOT BACKGROUND (Adapts to Light/Dark Mode)
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         
-        // 1. MASSIVE DYNAMIC CURVE (Matches Auth Screen Style)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.80f) // Takes up 80% of the screen height
-                .clip(RoundedCornerShape(bottomStart = 120.dp)) // Sweeping bottom-left curve
+                .fillMaxHeight(0.80f) 
+                .clip(RoundedCornerShape(bottomStart = 120.dp)) 
                 .background(primaryGradient)
         ) {
             
-            // MAIN CONTENT CENTERED INSIDE THE CURVE
             Column(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // App Logo
+                // ==========================================
+                // ANIMATED LOGO
+                // ==========================================
                 Image(
                     painter = painterResource(id = R.drawable.logo),
                     contentDescription = "App Logo",
                     modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = logoScale.value
+                            scaleY = logoScale.value
+                            alpha = logoAlpha.value
+                        }
                         .size(120.dp)
                         .background(Color.White, RoundedCornerShape(32.dp))
                         .padding(12.dp)
@@ -77,29 +121,41 @@ fun SplashScreen(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // App Title
-                Text(
-                    text = "JCV MOCK TESTS",
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp
-                )
-                
-                Text(
-                    text = "Your Path to Success",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                // ==========================================
+                // ANIMATED TEXT BLOCK
+                // ==========================================
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .offset(y = textOffset.value.dp)
+                        .alpha(textAlpha.value)
+                ) {
+                    Text(
+                        text = "JCV MOCK TESTS",
+                        color = Color.White,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    )
+                    
+                    Text(
+                        text = "Your Path to Success",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
             }
         }
 
-        // 2. LOADING INDICATOR (At the very bottom of the screen)
+        // ==========================================
+        // ANIMATED LOADING INDICATOR
+        // ==========================================
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 48.dp),
+                .padding(bottom = 48.dp)
+                .alpha(loaderAlpha.value),
             contentAlignment = Alignment.BottomCenter
         ) {
             CircularProgressIndicator(
@@ -109,7 +165,9 @@ fun SplashScreen(
             )
         }
 
-        // 3. THEME SWITCHER (Absolute Top Layer for clickability)
+        // ==========================================
+        // THEME SWITCHER (Top Layer)
+        // ==========================================
         Row(
             modifier = Modifier
                 .fillMaxWidth()
