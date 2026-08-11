@@ -35,8 +35,8 @@ import com.jcv.mocktests.utils.LocalStorage
 
 @Composable
 fun AuthScreen(
-    currentTheme: AppTheme,
-    onThemeChange: (AppTheme) -> Unit,
+    currentTheme: AppTheme, 
+    onThemeChange: (AppTheme) -> Unit, 
     onNavigateToHome: () -> Unit,
     onNavigateToSignup: () -> Unit
 ) {
@@ -108,30 +108,7 @@ fun AuthScreen(
                 .clip(RoundedCornerShape(bottomStart = 80.dp))
                 .background(primaryGradient)
         ) {
-            // FIXED THEME SWITCHER: Now wrapped in IconButton for a massive, easy-to-click target!
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 40.dp, end = 8.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppTheme.values().forEach { themeOption ->
-                    IconButton(
-                        onClick = { onThemeChange(themeOption) },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(if (currentTheme == themeOption) 26.dp else 18.dp)
-                                .clip(CircleShape)
-                                .background(themeOption.swatchColor)
-                                .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
-                        )
-                    }
-                }
-            }
-
+            // MOVED LOGO COLUMN FIRST (so it draws underneath the buttons)
             Column(
                 modifier = Modifier.fillMaxSize().padding(top = 80.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -143,6 +120,27 @@ fun AuthScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("JCV MOCK TESTS", fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Black)
                 Text("Welcome Back", fontSize = 16.sp, color = Color.White.copy(alpha = 0.8f))
+            }
+
+            // MOVED THEME SWITCHER ROW SECOND (so it sits on top and catches clicks!)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 48.dp, end = 24.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppTheme.values().forEach { themeOption ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(if (currentTheme == themeOption) 26.dp else 20.dp)
+                            .clip(CircleShape)
+                            .background(themeOption.swatchColor)
+                            .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
+                            .clickable { onThemeChange(themeOption) }
+                    )
+                }
             }
         }
 
