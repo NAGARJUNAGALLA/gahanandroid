@@ -65,11 +65,9 @@ data class CourseModel(
 fun MainDashboardScreen(
     initialTab: String,
     isDarkMode: Boolean,           
-    onToggleTheme: () -> Unit,     
     onNavigateToCourse: (String) -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
-    // Dynamically grab the theme colors
     val themePrimaryColor = MaterialTheme.colorScheme.primary
     val primaryGradient = Brush.horizontalGradient(listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor))
 
@@ -256,10 +254,7 @@ fun MainDashboardScreen(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(onClick = onToggleTheme) {
-                                Icon(imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Toggle Theme", tint = Color.White)
-                            }
+                            // REMOVED THE THEME TOGGLE ICON BUTTON FROM HERE
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                     )
