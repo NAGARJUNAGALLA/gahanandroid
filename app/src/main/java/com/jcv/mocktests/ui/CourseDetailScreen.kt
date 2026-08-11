@@ -41,8 +41,6 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-
-
 data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
 data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
 
@@ -54,9 +52,11 @@ fun CourseDetailScreen(
     onNavigateToStudyMaterial: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    // Dynamically grab the theme colors
+    val themePrimaryColor = MaterialTheme.colorScheme.primary
+    val primaryGradient = Brush.horizontalGradient(listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor))
+
     val context = LocalContext.current
-    val ViewSeriesBlue = MaterialTheme.colorScheme.primary
-    val PrimaryGradient = Brush.horizontalGradient(listOf(ViewSeriesBlue.copy(alpha = 0.75f), ViewSeriesBlue))
     val localStorage = remember { LocalStorage(context) }
     val examPrefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) } 
     val auth = remember { FirebaseAuth.getInstance() }
@@ -183,14 +183,11 @@ fun CourseDetailScreen(
 
     Scaffold(
         topBar = {
-            // ==========================================
-            // DYNAMIC CURVED HEADER FOR COURSE DETAILS
-            // ==========================================
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(bottomEnd = 40.dp)) // Opposing curve to dashboard
-                    .background(PrimaryGradient)
+                    .clip(RoundedCornerShape(bottomEnd = 40.dp))
+                    .background(primaryGradient)
             ) {
                 TopAppBar(
                     title = { Text("Course Details", color = Color.White) },
@@ -203,18 +200,18 @@ fun CourseDetailScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            TabRow(selectedTabIndex = selectedTab, contentColor = ViewSeriesBlue, containerColor = Color.White) {
+            TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTab == index, onClick = { selectedTab = index },
-                        text = { Text(text = title, color = if (selectedTab == index) ViewSeriesBlue else Color.Gray, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
+                        text = { Text(text = title, color = if (selectedTab == index) themePrimaryColor else Color.Gray, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
                     )
                 }
             }
 
             if (selectedTab == 0) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                    Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Comprehensive mock tests designed to help you prepare and excel.", color = Color.Gray)
                     Spacer(modifier = Modifier.height(24.dp))
@@ -222,16 +219,16 @@ fun CourseDetailScreen(
                     val totalQs = tests.sumOf { it.questionCount }
                     
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Card(modifier = Modifier.weight(1f).padding(end = 8.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
+                        Card(modifier = Modifier.weight(1f).padding(end = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
                             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("${tests.size}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
-                                Text("Total Tests", fontSize = 12.sp, color = Color.Gray)
+                                Text("${tests.size}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = themePrimaryColor)
+                                Text("Total Tests", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        Card(modifier = Modifier.weight(1f).padding(start = 8.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
+                        Card(modifier = Modifier.weight(1f).padding(start = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
                             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("$totalQs", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ViewSeriesBlue)
-                                Text("Total Questions", fontSize = 12.sp, color = Color.Gray)
+                                Text("$totalQs", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = themePrimaryColor)
+                                Text("Total Questions", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -250,31 +247,31 @@ fun CourseDetailScreen(
                             }
                         }
                     } else {
-                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)), border = BorderStroke(1.dp, ViewSeriesBlue), shape = RoundedCornerShape(24.dp)) {
+                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, themePrimaryColor), shape = RoundedCornerShape(24.dp)) {
                             Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Column {
                                     Text("Subscription Validity", fontSize = 12.sp, color = Color.Gray)
-                                    Text("$courseDuration Months Access", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1E293B))
+                                    Text("$courseDuration Months Access", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
                                 }
-                                Text("₹${courseFee.toInt()}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = ViewSeriesBlue)
+                                Text("₹${courseFee.toInt()}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = themePrimaryColor)
                             }
                         }
                         
                         Spacer(modifier = Modifier.height(24.dp))
-                        OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = ViewSeriesBlue)) {
+                        OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)) {
                             Text("Unlock Course Content", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             } else {
-                Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF8FAFC)), contentAlignment = Alignment.TopCenter) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
                     if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ViewSeriesBlue) }
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = themePrimaryColor) }
                     } else if (paymentStatus != "approved") {
                         Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size(64.dp), tint = Color.LightGray)
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text(text = if (paymentStatus == "expired") "Subscription Expired" else "Course Locked", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                            Text(text = if (paymentStatus == "expired") "Subscription Expired" else "Course Locked", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.height(8.dp))
                             
                             if (paymentStatus == "pending") {
@@ -313,24 +310,24 @@ fun CourseDetailScreen(
                                         val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
                                         val testScore = localStorage.getTestScore(courseId, test.name)
                                         
-                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(24.dp)) {
+                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(24.dp)) {
                                             Column(modifier = Modifier.padding(16.dp)) {
-                                                Text(text = test.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                                                Text(text = test.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                                 Spacer(modifier = Modifier.height(12.dp))
                                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Icon(Icons.Default.List, contentDescription = "Questions", modifier = Modifier.size(16.dp), tint = Color.Gray)
                                                         Spacer(modifier = Modifier.width(6.dp))
-                                                        Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                                                        Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                                                     }
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Icon(Icons.Default.DateRange, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
                                                         Spacer(modifier = Modifier.width(6.dp))
-                                                        Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                                                        Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                                                     }
                                                 }
                                                 Spacer(modifier = Modifier.height(16.dp))
-                                                Divider(color = Color(0xFFF1F5F9))
+                                                Divider(color = MaterialTheme.colorScheme.surfaceVariant)
                                                 Spacer(modifier = Modifier.height(16.dp))
                                                 
                                                 if (alreadyAttempted && testScore != null) {
@@ -340,12 +337,12 @@ fun CourseDetailScreen(
                                                             Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
                                                             Text(text = "${formatScore(testScore.first)} / ${formatScore(testScore.second)}", color = Color(0xFF27AE60), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                                         }
-                                                        OutlinedButton(onClick = { onNavigateToExam(courseId, test.name, true) }, colors = ButtonDefaults.outlinedButtonColors(contentColor = ViewSeriesBlue), shape = RoundedCornerShape(50)) {
+                                                        OutlinedButton(onClick = { onNavigateToExam(courseId, test.name, true) }, colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor), shape = RoundedCornerShape(50)) {
                                                             Text("Review Test", fontWeight = FontWeight.Bold)
                                                         }
                                                     }
                                                 } else {
-                                                    Button(onClick = { onNavigateToExam(courseId, test.name, false) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)) {
+                                                    Button(onClick = { onNavigateToExam(courseId, test.name, false) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)) {
                                                         Text("Take Test", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                                     }
                                                 }
@@ -359,7 +356,7 @@ fun CourseDetailScreen(
                                 Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
                                     Spacer(modifier = Modifier.height(16.dp))
-                                    Text("No Saved Doubts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.DarkGray)
+                                    Text("No Saved Doubts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Gray)
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(text = "When taking a mock test, tap the ⭐ icon next to difficult questions to save them here for quick revision!", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 14.sp)
                                 }
@@ -367,7 +364,7 @@ fun CourseDetailScreen(
                                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     item { Text(text = "Review your saved questions. The correct answers are highlighted in green.", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)) }
                                     items(bookmarkedQuestions) { bq ->
-                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp), shape = RoundedCornerShape(24.dp)) {
+                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(2.dp), shape = RoundedCornerShape(24.dp)) {
                                             Column(modifier = Modifier.padding(16.dp)) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Icon(Icons.Default.Star, contentDescription = "Saved", tint = Color(0xFFFFC107), modifier = Modifier.size(18.dp))
@@ -382,11 +379,11 @@ fun CourseDetailScreen(
                                                 Spacer(modifier = Modifier.height(16.dp))
                                                 bq.options.forEachIndexed { index, opt ->
                                                     val isCorrect = index == bq.correctOptionIndex
-                                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).background(if (isCorrect) Color(0xFFF0FDF4) else Color(0xFFF8FAFC), RoundedCornerShape(12.dp)).border(1.dp, if (isCorrect) Color(0xFF4CAF50) else Color.Transparent, RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).background(if (isCorrect) Color(0xFFF0FDF4) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).border(1.dp, if (isCorrect) Color(0xFF4CAF50) else Color.Transparent, RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                                         if (isCorrect) { Icon(Icons.Default.CheckCircle, contentDescription = "Correct", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(8.dp)) } 
                                                         else { Spacer(modifier = Modifier.width(26.dp)) }
                                                         Box(modifier = Modifier.weight(1f)) {
-                                                            MathText(text = opt, fontSizePx = 14, textColorHex = if (isCorrect) "#166534" else "#333333")
+                                                            MathText(text = opt, fontSizePx = 14, textColorHex = if (isCorrect) "#166534" else "#888888")
                                                             Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
                                                         }
                                                     }
@@ -404,15 +401,13 @@ fun CourseDetailScreen(
     }
 }
 
-// ==========================================
-// PAYMENT MODAL DIALOG
-// ==========================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentDialog(
     courseTitle: String, courseFee: Double, courseDuration: Int, isRejected: Boolean, isSubmitting: Boolean,
     upiId: String, merchantName: String, staticQrUrl: String, onDismiss: () -> Unit, onSubmit: (String, String) -> Unit
 ) {
+    val themePrimaryColor = MaterialTheme.colorScheme.primary
     var selectedApp by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var utr by remember { mutableStateOf("") }
@@ -425,16 +420,16 @@ fun PaymentDialog(
     }
 
     AlertDialog(
-        onDismissRequest = { if (!isSubmitting) onDismiss() }, containerColor = Color.White, shape = RoundedCornerShape(24.dp),
+        onDismissRequest = { if (!isSubmitting) onDismiss() }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp),
         title = {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Unlock Course", fontWeight = FontWeight.Bold, color = ViewSeriesBlue, fontSize = 18.sp)
+                Text("Unlock Course", fontWeight = FontWeight.Bold, color = themePrimaryColor, fontSize = 18.sp)
                 IconButton(onClick = onDismiss, enabled = !isSubmitting) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray) }
             }
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("₹${courseFee.toInt()}", fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color(0xFF1E293B))
+                Text("₹${courseFee.toInt()}", fontSize = 36.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
                 if (isRejected) Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()) { Text(text = "Your previous payment was rejected.\nPlease try again.", color = Color(0xFFC62828), fontSize = 12.sp, modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold) }
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
@@ -450,16 +445,16 @@ fun PaymentDialog(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "OR scan the QR code below", fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 8.dp))
-                Box(modifier = Modifier.size(160.dp).background(Color(0xFFF1F5F9), RoundedCornerShape(16.dp)).border(1.dp, Color.LightGray, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                    if (qrUrl.isNotBlank()) AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(qrUrl).crossfade(true).build(), contentDescription = "UPI QR Code", modifier = Modifier.padding(8.dp).fillMaxSize()) else CircularProgressIndicator(color = ViewSeriesBlue, modifier = Modifier.size(24.dp))
+                Box(modifier = Modifier.size(160.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)).border(1.dp, Color.LightGray, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                    if (qrUrl.isNotBlank()) AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(qrUrl).crossfade(true).build(), contentDescription = "UPI QR Code", modifier = Modifier.padding(8.dp).fillMaxSize()) else CircularProgressIndicator(color = themePrimaryColor, modifier = Modifier.size(24.dp))
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
                     OutlinedTextField(
                         value = selectedApp, onValueChange = {}, readOnly = true, label = { Text("Paid using app") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(), shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
+                        modifier = Modifier.fillMaxWidth().menuAnchor(), shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
                     )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color.White)) {
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
                         apps.forEach { app -> DropdownMenuItem(text = { Text(app) }, onClick = { selectedApp = app; expanded = false; hasClickedPay = true }) }
                     }
                 }
@@ -467,7 +462,7 @@ fun PaymentDialog(
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = utr, onValueChange = { utr = it }, label = { Text("Transaction / UTR Number") }, placeholder = { Text("e.g. 123456789012") },
-                        modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
+                        modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
                     )
                 }
             }
@@ -476,7 +471,7 @@ fun PaymentDialog(
             if (hasClickedPay || selectedApp.isNotBlank()) {
                 Button(
                     onClick = { onSubmit(if (selectedApp.isNotBlank()) selectedApp else "Direct UPI", utr) }, 
-                    modifier = Modifier.fillMaxWidth().height(48.dp), enabled = utr.isNotBlank() && !isSubmitting, colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue), shape = RoundedCornerShape(50)
+                    modifier = Modifier.fillMaxWidth().height(48.dp), enabled = utr.isNotBlank() && !isSubmitting, colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor), shape = RoundedCornerShape(50)
                 ) { if (isSubmitting) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) else Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White) }
             }
         },
