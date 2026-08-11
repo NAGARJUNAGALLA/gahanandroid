@@ -49,10 +49,8 @@ import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
 import kotlinx.coroutines.launch
 
-// NEW: Added STUDY_MATERIAL to BottomTab
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES, STUDY_MATERIAL }
 
-// NEW THEME COLORS MATCHING AUTH SCREENS
 private val ViewSeriesBlue = Color(0xFF2962FF)
 private val PrimaryGradient = Brush.horizontalGradient(listOf(Color(0xFF1565C0), ViewSeriesBlue))
 
@@ -201,7 +199,6 @@ fun MainDashboardScreen(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
                         )
                         
-                        // NEW: Study Material Drawer Item
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Info, contentDescription = "Study Material", tint = ViewSeriesBlue) },
                             label = { Text("Study Material", fontWeight = FontWeight.Bold) },
@@ -250,9 +247,6 @@ fun MainDashboardScreen(
         ) {
             Scaffold(
                 topBar = {
-                    // ==========================================
-                    // NEW: DYNAMIC CURVED HEADER FOR DASHBOARD
-                    // ==========================================
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -283,33 +277,36 @@ fun MainDashboardScreen(
                     }
                 },
                 bottomBar = {
-                    NavigationBar(containerColor = Color.White, contentColor = ViewSeriesBlue, tonalElevation = 8.dp) {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface, // DYNAMIC: Adapts to Dark Mode
+                        contentColor = MaterialTheme.colorScheme.onSurface, 
+                        tonalElevation = 8.dp
+                    ) {
                         NavigationBarItem(
                             icon = { Icon(Icons.Default.Home, contentDescription = "Home") }, label = { Text("Home", fontSize = 10.sp) },
-                            selected = selectedTab == BottomTab.HOME, onClick = { selectedTab = BottomTab.HOME }, colors = navColors()
+                            selected = selectedTab == BottomTab.HOME, onClick = { selectedTab = BottomTab.HOME }, colors = navColors(isDarkMode)
                         )
                         NavigationBarItem(
                             icon = { Icon(Icons.Default.Star, contentDescription = "Pro Courses") }, label = { Text("Pro", fontSize = 10.sp) },
-                            selected = selectedTab == BottomTab.PRO_COURSES, onClick = { selectedTab = BottomTab.PRO_COURSES }, colors = navColors()
+                            selected = selectedTab == BottomTab.PRO_COURSES, onClick = { selectedTab = BottomTab.PRO_COURSES }, colors = navColors(isDarkMode)
                         )
                         NavigationBarItem(
                             icon = { Icon(Icons.Default.List, contentDescription = "Purchased") }, label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
-                            selected = selectedTab == BottomTab.PURCHASED_COURSES, onClick = { if (auth.currentUser == null) onNavigateToLogin() else selectedTab = BottomTab.PURCHASED_COURSES }, colors = navColors()
+                            selected = selectedTab == BottomTab.PURCHASED_COURSES, onClick = { if (auth.currentUser == null) onNavigateToLogin() else selectedTab = BottomTab.PURCHASED_COURSES }, colors = navColors(isDarkMode)
                         )
-                        // NEW: Study Material Nav Item
                         NavigationBarItem(
                             icon = { Icon(Icons.Default.Info, contentDescription = "Study") }, label = { Text("Study", fontSize = 10.sp) },
-                            selected = selectedTab == BottomTab.STUDY_MATERIAL, onClick = { selectedTab = BottomTab.STUDY_MATERIAL }, colors = navColors()
+                            selected = selectedTab == BottomTab.STUDY_MATERIAL, onClick = { selectedTab = BottomTab.STUDY_MATERIAL }, colors = navColors(isDarkMode)
                         )
                     }
                 }
             ) { paddingValues ->
                 Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(MaterialTheme.colorScheme.background)) { 
                     when (selectedTab) {
-                        BottomTab.HOME -> DashboardHomeContent(allCourses, purchasedCourses, proCourses, approvedSheetIds, auth, isLoading) { onNavigateToCourse(it.sheetId) }
+                        BottomTab.HOME -> DashboardHomeContent(allCourses, purchasedCourses, proCourses, approvedSheetIds, auth, isLoading, isDarkMode) { onNavigateToCourse(it.sheetId) }
                         BottomTab.PRO_COURSES -> if (isLoading && proCourses.isEmpty()) LoadingLogo() else CourseGridScreen("Pro Courses", proCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
                         BottomTab.PURCHASED_COURSES -> if (isLoading && purchasedCourses.isEmpty()) LoadingLogo() else CourseGridScreen("Purchased Courses", purchasedCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
-                        BottomTab.STUDY_MATERIAL -> StudyMaterialWebViewScreen() // Render the offline webview
+                        BottomTab.STUDY_MATERIAL -> LocalStudyMaterialScreen() // DYNAMIC: Loads local HTML
                     }
                 }
             }
@@ -318,10 +315,10 @@ fun MainDashboardScreen(
 }
 
 // ==========================================
-// NEW: OFFLINE CACHED WEBVIEW COMPOSABLE
+// OFFLINE LOCAL HTML WEBVIEW
 // ==========================================
 @Composable
-fun StudyMaterialWebViewScreen() {
+fun LocalStudyMaterialScreen() {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
@@ -330,12 +327,12 @@ fun StudyMaterialWebViewScreen() {
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    databaseEnabled = true
-                    // CRITICAL FOR OFFLINE SUPPORT: Load from cache if network is unavailable
-                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                    allowFileAccess = true // CRITICAL: Allows reading from local files
                 }
-                // Replace with your actual study material URL
-                loadUrl("https://jcvmocktests.com/study-materials")
+                
+                // This targets: src/main/assets/study_material.html
+                // You can add an HTML file there and it will load instantly without internet!
+                loadUrl("file:///android_asset/study_material.html")
             }
         }
     )
@@ -349,10 +346,11 @@ fun LoadingLogo() {
 }
 
 @Composable
-fun navColors() = NavigationBarItemDefaults.colors(
+fun navColors(isDarkMode: Boolean) = NavigationBarItemDefaults.colors(
     selectedIconColor = ViewSeriesBlue, selectedTextColor = ViewSeriesBlue, 
-    indicatorColor = ViewSeriesBlue.copy(alpha = 0.1f), 
-    unselectedIconColor = Color.Gray, unselectedTextColor = Color.Gray
+    indicatorColor = if(isDarkMode) Color.White.copy(alpha = 0.1f) else ViewSeriesBlue.copy(alpha = 0.1f), 
+    unselectedIconColor = if(isDarkMode) Color.Gray else Color.Gray, 
+    unselectedTextColor = if(isDarkMode) Color.Gray else Color.Gray
 )
 
 @Composable
@@ -373,7 +371,7 @@ fun DrawerCourseItem(title: String, onClick: () -> Unit) {
 @Composable
 fun DashboardHomeContent(
     allCourses: List<CourseModel>, purchasedCourses: List<CourseModel>, proCourses: List<CourseModel>,
-    approvedSheetIds: List<String>, auth: FirebaseAuth, isLoading: Boolean, onCourseClick: (CourseModel) -> Unit
+    approvedSheetIds: List<String>, auth: FirebaseAuth, isLoading: Boolean, isDarkMode: Boolean, onCourseClick: (CourseModel) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     val homeCategories = listOf("Pro Courses", "Purchased", "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET")
@@ -383,7 +381,11 @@ fun DashboardHomeContent(
             UserProfileHeader(auth)
             Text(text = "Welcome to JCV MOCK Tests and Thanks for Choosing JCV MOCK TESTS", color = ViewSeriesBlue, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).basicMarquee())
             LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(homeCategories) { index, categoryName -> PastelCategoryCard(categoryName, PastelColors[index % PastelColors.size]) { selectedCategory = categoryName } }
+                itemsIndexed(homeCategories) { index, categoryName -> 
+                    // DYNAMIC: Categories turn dark gray in dark mode so they aren't blinding
+                    val catBg = if (isDarkMode) MaterialTheme.colorScheme.surfaceVariant else PastelColors[index % PastelColors.size]
+                    PastelCategoryCard(categoryName, catBg) { selectedCategory = categoryName } 
+                }
             }
         }
     } else {
@@ -420,14 +422,15 @@ fun UserProfileHeader(auth: FirebaseAuth) {
     val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
     val mobileNumber = auth.currentUser?.phoneNumber ?: "Mobile Number Not Set"
     Card(
-        modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(), 
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), // DYNAMIC
         shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Image(painter = painterResource(id = R.drawable.logo), contentDescription = "App Logo", modifier = Modifier.size(60.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)))
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                Text(userName, fontWeight = FontWeight.Black, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+                Text(userName, fontWeight = FontWeight.Black, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface) // DYNAMIC
                 Text(mobileNumber, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
             }
         }
@@ -438,8 +441,8 @@ fun UserProfileHeader(auth: FirebaseAuth) {
 fun PastelCategoryCard(title: String, backgroundColor: Color, onClick: () -> Unit) {
     Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = backgroundColor), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), modifier = Modifier.height(110.dp).clickable { onClick() }) {
         Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Box(modifier = Modifier.size(36.dp).background(Color.White, CircleShape).align(Alignment.TopStart), contentAlignment = Alignment.Center) { Text("🎓", fontSize = 18.sp) }
-            Text(text = title, color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.align(Alignment.BottomEnd))
+            Box(modifier = Modifier.size(36.dp).background(Color.White.copy(alpha = 0.8f), CircleShape).align(Alignment.TopStart), contentAlignment = Alignment.Center) { Text("🎓", fontSize = 18.sp) }
+            Text(text = title, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.align(Alignment.BottomEnd)) // DYNAMIC
         }
     }
 }
@@ -463,7 +466,7 @@ fun CourseCardView(course: CourseModel, isUnlocked: Boolean, onClick: () -> Unit
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).clickable { onClick() },
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), // DYNAMIC
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
