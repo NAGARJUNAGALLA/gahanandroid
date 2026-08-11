@@ -52,6 +52,14 @@ class LocalStorage(private val context: Context) {
             .putBoolean("attempted_${courseId}_${testName}", true)
             .apply()
     }
+    
+    fun saveAppTheme(themeName: String) {
+        prefs.edit().putString("app_theme", themeName).apply()
+    }
+
+    fun getAppTheme(): String {
+        return prefs.getString("app_theme", "Blue") ?: "Blue"
+    }
 
     // SAFELY RETRIEVES FLOAT (Prevents crashes from older integer scores)
     fun getTestScore(courseId: String, testName: String): Pair<Float, Float>? {
