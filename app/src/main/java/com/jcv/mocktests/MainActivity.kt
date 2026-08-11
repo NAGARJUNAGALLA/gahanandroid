@@ -44,7 +44,7 @@ enum class AppTheme(val themeName: String, val primaryColor: Color, val isDark: 
     GREEN("Green", Color(0xFF2E7D32), false, Color(0xFF2E7D32)),
     PURPLE("Purple", Color(0xFF6200EA), false, Color(0xFF6200EA)),
     ORANGE("Orange", Color(0xFFE65100), false, Color(0xFFE65100)),
-    DARK("Dark", Color(0xFF64B5F6), true, Color(0xFF1E293B)) // Dark mode uses a light blue accent, but dark swatch
+    DARK("Dark", Color(0xFF64B5F6), true, Color(0xFF1E293B)) 
 }
 
 @Composable
@@ -133,12 +133,6 @@ fun MockTestsApp() {
                 MainDashboardScreen(
                     initialTab = tab,
                     isDarkMode = currentTheme.isDark,
-                    onToggleTheme = {
-                        // Allows toggling between Blue and Dark Mode from the dashboard moon icon
-                        val newTheme = if (currentTheme.isDark) AppTheme.BLUE else AppTheme.DARK
-                        currentThemeName = newTheme.themeName
-                        localStorage.saveAppTheme(newTheme.themeName)
-                    },
                     onNavigateToCourse = { courseId -> navController.navigate("course_details/$courseId") },
                     onNavigateToLogin = { navController.navigate("login") { popUpTo(0) } }
                 )
