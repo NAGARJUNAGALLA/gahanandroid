@@ -3,9 +3,11 @@ package com.jcv.mocktests.ui
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -27,17 +29,21 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.jcv.mocktests.AppTheme
 import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
 
-private val ViewSeriesBlue = Color(0xFF2962FF)
-private val PrimaryGradient = Brush.verticalGradient(listOf(Color(0xFF1565C0), ViewSeriesBlue))
-
 @Composable
 fun AuthScreen(
+    currentTheme: AppTheme, // Receives the theme state
+    onThemeChange: (AppTheme) -> Unit, // Handles theme switching
     onNavigateToHome: () -> Unit,
     onNavigateToSignup: () -> Unit
 ) {
+    // DYNAMIC THEME COLORS (Replaces hardcoded ViewSeriesBlue)
+    val themePrimaryColor = MaterialTheme.colorScheme.primary
+    val primaryGradient = Brush.verticalGradient(listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor))
+
     var email by remember { mutableStateOf("") } 
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -54,28 +60,20 @@ fun AuthScreen(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
-    // ==========================================
-    // FORGOT PASSWORD DIALOG
-    // ==========================================
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { if (!isSendingReset) showResetDialog = false },
-            containerColor = Color.White,
+            containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(24.dp),
-            title = { Text("Reset Password", fontWeight = FontWeight.Bold, color = ViewSeriesBlue) },
+            title = { Text("Reset Password", fontWeight = FontWeight.Bold, color = themePrimaryColor) },
             text = {
                 Column {
                     Text("Enter your email address and we'll send you a link to reset your password.", fontSize = 14.sp, color = Color.Gray)
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
-                        value = resetEmail,
-                        onValueChange = { resetEmail = it },
-                        label = { Text("Email Address") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
+                        value = resetEmail, onValueChange = { resetEmail = it }, label = { Text("Email Address") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
                     )
                 }
             },
@@ -83,75 +81,65 @@ fun AuthScreen(
                 Button(
                     onClick = {
                         val emailToReset = resetEmail.trim()
-                        if (emailToReset.isBlank()) {
-                            Toast.makeText(context, "Please enter your email", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
+                        if (emailToReset.isBlank()) { Toast.makeText(context, "Please enter your email", Toast.LENGTH_SHORT).show(); return@Button }
                         isSendingReset = true
-                        
-                        // 1. CHECK IF EMAIL EXISTS IN DATABASE FIRST
-                        FirebaseFirestore.getInstance().collection("users")
-                            .whereEqualTo("email", emailToReset)
-                            .get()
-                            .addOnSuccessListener { documents ->
-                                if (documents.isEmpty) {
-                                    // EMAIL NOT FOUND
+                        FirebaseFirestore.getInstance().collection("users").whereEqualTo("email", emailToReset).get().addOnSuccessListener { documents ->
+                            if (documents.isEmpty) { isSendingReset = false; Toast.makeText(context, "This email is not registered.", Toast.LENGTH_LONG).show() } 
+                            else {
+                                auth.sendPasswordResetEmail(emailToReset).addOnCompleteListener { task ->
                                     isSendingReset = false
-                                    Toast.makeText(context, "This email is not registered with us.", Toast.LENGTH_LONG).show()
-                                } else {
-                                    // EMAIL FOUND, PROCEED TO SEND RESET LINK
-                                    auth.sendPasswordResetEmail(emailToReset)
-                                        .addOnCompleteListener { task ->
-                                            isSendingReset = false
-                                            if (task.isSuccessful) {
-                                                Toast.makeText(context, "Password reset link sent to your email!", Toast.LENGTH_LONG).show()
-                                                showResetDialog = false
-                                            } else {
-                                                Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_LONG).show()
-                                            }
-                                        }
+                                    if (task.isSuccessful) { Toast.makeText(context, "Link sent to your email!", Toast.LENGTH_LONG).show(); showResetDialog = false } 
+                                    else { Toast.makeText(context, "Error: ${task.exception?.message}", Toast.LENGTH_LONG).show() }
                                 }
                             }
-                            .addOnFailureListener { e ->
-                                isSendingReset = false
-                                Toast.makeText(context, "Error checking email: ${e.message}", Toast.LENGTH_LONG).show()
-                            }
+                        }.addOnFailureListener { e -> isSendingReset = false; Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show() }
                     },
-                    enabled = !isSendingReset,
-                    colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
-                ) {
-                    if (isSendingReset) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                    else Text("Send Link")
-                }
+                    enabled = !isSendingReset, colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
+                ) { if (isSendingReset) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Send Link") }
             },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }, enabled = !isSendingReset) { Text("Cancel", color = Color.Gray) }
-            }
+            dismissButton = { TextButton(onClick = { showResetDialog = false }, enabled = !isSendingReset) { Text("Cancel", color = Color.Gray) } }
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF4F7FB))) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // ==========================================
-        // DYNAMIC SHAPE HEADER
+        // DYNAMIC SHAPE HEADER WITH THEME SWITCHER
         // ==========================================
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(320.dp)
                 .clip(RoundedCornerShape(bottomStart = 80.dp))
-                .background(PrimaryGradient)
+                .background(primaryGradient)
         ) {
+            // THEME SWITCHER ROW
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 48.dp, end = 24.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppTheme.values().forEach { themeOption ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(if (currentTheme == themeOption) 26.dp else 20.dp)
+                            .clip(CircleShape)
+                            .background(themeOption.swatchColor)
+                            .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
+                            .clickable { onThemeChange(themeOption) }
+                    )
+                }
+            }
+
             Column(
-                modifier = Modifier.fillMaxSize().padding(top = 48.dp),
+                modifier = Modifier.fillMaxSize().padding(top = 80.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = "App Logo",
-                    modifier = Modifier
-                        .size(90.dp)
-                        .background(Color.White, RoundedCornerShape(24.dp))
-                        .padding(8.dp)
+                    painter = painterResource(id = R.drawable.logo), contentDescription = "App Logo",
+                    modifier = Modifier.size(90.dp).background(Color.White, RoundedCornerShape(24.dp)).padding(8.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("JCV MOCK TESTS", fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Black)
@@ -163,67 +151,40 @@ fun AuthScreen(
         // FLOATING LOGIN CARD
         // ==========================================
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState),
+            modifier = Modifier.fillMaxSize().verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(240.dp))
 
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                 shape = RoundedCornerShape(24.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("Login to Continue", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Login to Continue", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(modifier = Modifier.height(24.dp))
 
                     OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text("Email Address") }, 
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
+                        value = email, onValueChange = { email = it }, label = { Text("Email Address") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Password") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ViewSeriesBlue, focusedLabelColor = ViewSeriesBlue)
+                        value = password, onValueChange = { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
                     )
                     
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                         Text(
-                            text = "Forgot Password?",
-                            color = ViewSeriesBlue,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .padding(top = 8.dp)
-                                .clickable { 
-                                    resetEmail = email 
-                                    showResetDialog = true 
-                                }
-                                .padding(4.dp)
+                            text = "Forgot Password?", color = themePrimaryColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 8.dp).clickable { resetEmail = email; showResetDialog = true }.padding(4.dp)
                         )
                     }
-                    
                     Spacer(modifier = Modifier.height(24.dp))
 
                     if (errorMessage != null) {
@@ -237,78 +198,39 @@ fun AuthScreen(
                                 isResending = true
                                 auth.currentUser?.sendEmailVerification()?.addOnCompleteListener { task ->
                                     isResending = false
-                                    if (task.isSuccessful) {
-                                        Toast.makeText(context, "Verification email resent! Check your inbox.", Toast.LENGTH_LONG).show()
-                                        auth.signOut()
-                                    }
+                                    if (task.isSuccessful) { Toast.makeText(context, "Link resent! Check inbox.", Toast.LENGTH_LONG).show(); auth.signOut() }
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), shape = RoundedCornerShape(50),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF57C00))
-                        ) {
-                            if (isResending) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFFF57C00), strokeWidth = 2.dp)
-                            else Text("Resend Verification Link", fontWeight = FontWeight.Bold)
-                        }
+                        ) { if (isResending) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFFF57C00), strokeWidth = 2.dp) else Text("Resend Verification Link", fontWeight = FontWeight.Bold) }
                     }
 
                     Button(
                         onClick = {
-                            if (email.isBlank() || password.isBlank()) {
-                                errorMessage = "Please enter both email and password"
-                                return@Button
-                            }
-
-                            isLoading = true
-                            needsVerification = false
-                            errorMessage = null
-                            
-                            auth.signInWithEmailAndPassword(email.trim(), password)
-                                .addOnCompleteListener { task ->
-                                    if (task.isSuccessful) {
-                                        val user = auth.currentUser
-                                        if (user != null && user.isEmailVerified) {
-                                            val deviceId = LocalStorage(context).getOrCreateDeviceId()
-                                            FirebaseFirestore.getInstance().collection("users").document(user.uid)
-                                                .set(mapOf("deviceId" to deviceId), SetOptions.merge())
-                                                .addOnSuccessListener {
-                                                    isLoading = false
-                                                    Toast.makeText(context, "Login Successful", Toast.LENGTH_SHORT).show()
-                                                    onNavigateToHome()
-                                                }
-                                        } else {
-                                            isLoading = false
-                                            needsVerification = true
-                                            errorMessage = "Your email is not verified. Please check your inbox/spam."
+                            if (email.isBlank() || password.isBlank()) { errorMessage = "Please enter both fields"; return@Button }
+                            isLoading = true; needsVerification = false; errorMessage = null
+                            auth.signInWithEmailAndPassword(email.trim(), password).addOnCompleteListener { task ->
+                                if (task.isSuccessful) {
+                                    val user = auth.currentUser
+                                    if (user != null && user.isEmailVerified) {
+                                        val deviceId = LocalStorage(context).getOrCreateDeviceId()
+                                        FirebaseFirestore.getInstance().collection("users").document(user.uid).set(mapOf("deviceId" to deviceId), SetOptions.merge()).addOnSuccessListener {
+                                            isLoading = false; onNavigateToHome()
                                         }
-                                    } else {
-                                        isLoading = false
-                                        errorMessage = task.exception?.message ?: "Login Failed"
-                                    }
-                                }
+                                    } else { isLoading = false; needsVerification = true; errorMessage = "Email not verified." }
+                                } else { isLoading = false; errorMessage = task.exception?.message ?: "Login Failed" }
+                            }
                         },
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        enabled = !isLoading,
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(containerColor = ViewSeriesBlue)
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                        } else {
-                            Text("Log In", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
-                    }
+                        modifier = Modifier.fillMaxWidth().height(50.dp), enabled = !isLoading, shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
+                    ) { if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White) else Text("Log In", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
                 }
             }
-            
             Spacer(modifier = Modifier.height(24.dp))
-            
-            Row(
-                modifier = Modifier.clickable { onNavigateToSignup() }.padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.clickable { onNavigateToSignup() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Don't have an account? ", color = Color.Gray, fontSize = 14.sp)
-                Text("Sign Up", color = ViewSeriesBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Sign Up", color = themePrimaryColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.height(32.dp))
         }
