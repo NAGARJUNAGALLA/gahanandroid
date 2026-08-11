@@ -32,8 +32,7 @@ import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
 
-private val ViewSeriesBlue = Color(0xFF2962FF)
-private val PrimaryGradient = Brush.verticalGradient(listOf(Color(0xFF1565C0), ViewSeriesBlue))
+
 
 @Composable
 fun SignupScreen(
@@ -51,6 +50,8 @@ fun SignupScreen(
 
     val auth = remember { FirebaseAuth.getInstance() }
     val context = LocalContext.current
+    val ViewSeriesBlue = MaterialTheme.colorScheme.primary
+    val PrimaryGradient = Brush.verticalGradient(listOf(ViewSeriesBlue.copy(alpha = 0.75f), ViewSeriesBlue))
     val scrollState = rememberScrollState()
 
     // ==========================================
