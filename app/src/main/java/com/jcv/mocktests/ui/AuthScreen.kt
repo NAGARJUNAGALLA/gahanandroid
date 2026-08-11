@@ -101,6 +101,8 @@ fun AuthScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        
+        // 1. HEADER LAYER (Bottom)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -108,7 +110,6 @@ fun AuthScreen(
                 .clip(RoundedCornerShape(bottomStart = 80.dp))
                 .background(primaryGradient)
         ) {
-            // MOVED LOGO COLUMN FIRST (so it draws underneath the buttons)
             Column(
                 modifier = Modifier.fillMaxSize().padding(top = 80.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -121,29 +122,9 @@ fun AuthScreen(
                 Text("JCV MOCK TESTS", fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Black)
                 Text("Welcome Back", fontSize = 16.sp, color = Color.White.copy(alpha = 0.8f))
             }
-
-            // MOVED THEME SWITCHER ROW SECOND (so it sits on top and catches clicks!)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 48.dp, end = 24.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppTheme.values().forEach { themeOption ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(if (currentTheme == themeOption) 26.dp else 20.dp)
-                            .clip(CircleShape)
-                            .background(themeOption.swatchColor)
-                            .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
-                            .clickable { onThemeChange(themeOption) }
-                    )
-                }
-            }
         }
 
+        // 2. SCROLLABLE LOGIN CARD LAYER (Middle)
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -227,6 +208,27 @@ fun AuthScreen(
                 Text("Sign Up", color = themePrimaryColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        // 3. THEME SWITCHER LAYER (Absolute Top Layer - Guarantees Clickability!)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 48.dp, end = 24.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppTheme.values().forEach { themeOption ->
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .size(if (currentTheme == themeOption) 26.dp else 20.dp)
+                        .clip(CircleShape)
+                        .background(themeOption.swatchColor)
+                        .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
+                        .clickable { onThemeChange(themeOption) }
+                )
+            }
         }
     }
 }
