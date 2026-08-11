@@ -35,12 +35,11 @@ import com.jcv.mocktests.utils.LocalStorage
 
 @Composable
 fun AuthScreen(
-    currentTheme: AppTheme, // Receives the theme state
-    onThemeChange: (AppTheme) -> Unit, // Handles theme switching
+    currentTheme: AppTheme,
+    onThemeChange: (AppTheme) -> Unit,
     onNavigateToHome: () -> Unit,
     onNavigateToSignup: () -> Unit
 ) {
-    // DYNAMIC THEME COLORS (Replaces hardcoded ViewSeriesBlue)
     val themePrimaryColor = MaterialTheme.colorScheme.primary
     val primaryGradient = Brush.verticalGradient(listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor))
 
@@ -102,9 +101,6 @@ fun AuthScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // ==========================================
-        // DYNAMIC SHAPE HEADER WITH THEME SWITCHER
-        // ==========================================
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -112,24 +108,27 @@ fun AuthScreen(
                 .clip(RoundedCornerShape(bottomStart = 80.dp))
                 .background(primaryGradient)
         ) {
-            // THEME SWITCHER ROW
+            // FIXED THEME SWITCHER: Now wrapped in IconButton for a massive, easy-to-click target!
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 48.dp, end = 24.dp),
+                    .padding(top = 40.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AppTheme.values().forEach { themeOption ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(if (currentTheme == themeOption) 26.dp else 20.dp)
-                            .clip(CircleShape)
-                            .background(themeOption.swatchColor)
-                            .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
-                            .clickable { onThemeChange(themeOption) }
-                    )
+                    IconButton(
+                        onClick = { onThemeChange(themeOption) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (currentTheme == themeOption) 26.dp else 18.dp)
+                                .clip(CircleShape)
+                                .background(themeOption.swatchColor)
+                                .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
+                        )
+                    }
                 }
             }
 
@@ -147,9 +146,6 @@ fun AuthScreen(
             }
         }
 
-        // ==========================================
-        // FLOATING LOGIN CARD
-        // ==========================================
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
