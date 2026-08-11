@@ -121,6 +121,11 @@ fun MockTestsApp() {
             
             composable("splash") {
                 SplashScreen(
+                    currentTheme = currentTheme,
+                    onThemeChange = { newTheme ->
+                        currentThemeName = newTheme.themeName
+                        localStorage.saveAppTheme(newTheme.themeName)
+                    },
                     onSplashFinished = {
                         val nextRoute = if (currentUser != null) "main_dashboard/home" else "login"
                         navController.navigate(nextRoute) { popUpTo("splash") { inclusive = true } }
