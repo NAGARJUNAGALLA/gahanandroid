@@ -41,9 +41,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// NEW THEME COLORS
-private val ViewSeriesBlue = Color(0xFF2962FF)
-private val PrimaryGradient = Brush.horizontalGradient(listOf(Color(0xFF1565C0), ViewSeriesBlue))
+
 
 data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
 data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
@@ -57,6 +55,8 @@ fun CourseDetailScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val ViewSeriesBlue = MaterialTheme.colorScheme.primary
+    val PrimaryGradient = Brush.horizontalGradient(listOf(ViewSeriesBlue.copy(alpha = 0.75f), ViewSeriesBlue))
     val localStorage = remember { LocalStorage(context) }
     val examPrefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) } 
     val auth = remember { FirebaseAuth.getInstance() }
