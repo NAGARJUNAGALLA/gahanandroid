@@ -315,20 +315,18 @@ fun LocalStudyMaterialScreen() {
                         canGoBack = view?.canGoBack() == true
                     }
 
-                    // 1. Intercept errors on newer Android versions (API 23+)
                     override fun onReceivedError(
                         view: WebView?,
                         request: android.webkit.WebResourceRequest?,
                         error: android.webkit.WebResourceError?
                     ) {
                         super.onReceivedError(view, request, error)
-                        // Only show error page if the main website failed to load (not just an image)
+                        // If it fails to load AND there is no cache, show the offline error screen
                         if (request?.isForMainFrame == true) {
                             showCustomErrorPage(view)
                         }
                     }
 
-                    // 2. Intercept errors on older Android versions
                     @Deprecated("Deprecated in Java")
                     override fun onReceivedError(
                         view: WebView?,
@@ -340,59 +338,44 @@ fun LocalStudyMaterialScreen() {
                         showCustomErrorPage(view)
                     }
                     
-                    // 3. The Custom Error Page HTML Generator
                     private fun showCustomErrorPage(view: WebView?) {
                         val errorHtml = """
                             <!DOCTYPE html>
                             <html>
                             <head>
-                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
                                 <style>
-                                    body {
-                                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                                        display: flex;
-                                        flex-direction: column;
-                                        align-items: center;
-                                        justify-content: center;
-                                        height: 80vh;
-                                        text-align: center;
-                                        background-color: #F8FAFC;
-                                        padding: 30px;
-                                        margin: 0;
-                                        color: #1E293B;
-                                    }
+                                    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; text-align: center; background-color: #F8FAFC; color: #1E293B; }
                                     .icon { font-size: 64px; margin-bottom: 20px; }
-                                    .title { font-size: 22px; font-weight: bold; margin-bottom: 12px; }
-                                    .subtitle { font-size: 15px; color: #64748B; line-height: 1.5; }
                                 </style>
                             </head>
                             <body>
                                 <div class="icon">📡</div>
-                                <div class="title">Oops! Connection Lost</div>
-                                <div class="subtitle">We couldn't reach the study materials. Please check your internet connection and try again.</div>
+                                <h2>No Internet Connection</h2>
+                                <p>Please connect to the internet to download the study materials for the first time.</p>
                             </body>
                             </html>
                         """.trimIndent()
-                        
-                        // Load this custom HTML instead of the default Android error page
                         view?.loadDataWithBaseURL(null, errorHtml, "text/html", "UTF-8", null)
                     }
                 }
                 
                 settings.apply {
                     javaScriptEnabled = true
+                    // 1. Enable Local Storage Databases
                     domStorageEnabled = true
-                    allowFileAccess = true 
-                    cacheMode = WebSettings.LOAD_NO_CACHE
+                    databaseEnabled = true
+                    
+                    // 2. THE OFFLINE MAGIC: Check cache first, if it fails, try network
+                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
                 }
-                loadUrl("https://jcv-mock-tests.web.app/studymaterial/")
                 
+                loadUrl("https://jcv-mock-tests.web.app/studymaterial/")
                 webViewRef = this
             }
         }
     )
 }
-
 @Composable
 fun LoadingLogo() {
     val themePrimaryColor = MaterialTheme.colorScheme.primary
