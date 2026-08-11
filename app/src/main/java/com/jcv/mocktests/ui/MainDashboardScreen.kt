@@ -293,22 +293,42 @@ fun MainDashboardScreen(
 
 @Composable
 fun LocalStudyMaterialScreen() {
+    // 1. Remember the WebView instance and its back-history state
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var canGoBack by remember { mutableStateOf(false) }
+
+
+    BackHandler(enabled = canGoBack) {
+        webViewRef?.goBack()
+    }
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
             WebView(context).apply {
-                // FIXED: Setting LayoutParams explicitly gives Compose the dimensions it needs to smoothly calculate scroll mechanics
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                webViewClient = WebViewClient()
+                
+                
+                webViewClient = object : WebViewClient() {
+                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        
+                        canGoBack = view?.canGoBack() == true
+                    }
+                }
+                
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     allowFileAccess = true 
                 }
                 loadUrl("https://jcv-mock-tests.web.app/studymaterial/")
+                
+    
+                webViewRef = this
             }
         }
     )
