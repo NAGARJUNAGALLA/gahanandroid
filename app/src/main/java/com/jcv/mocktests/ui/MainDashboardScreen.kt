@@ -293,10 +293,8 @@ fun MainDashboardScreen(
 
 @Composable
 fun LocalStudyMaterialScreen() {
-    // 1. Remember the WebView instance and its back-history state
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
-
 
     BackHandler(enabled = canGoBack) {
         webViewRef?.goBack()
@@ -311,12 +309,73 @@ fun LocalStudyMaterialScreen() {
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 
-                
                 webViewClient = object : WebViewClient() {
                     override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                         super.doUpdateVisitedHistory(view, url, isReload)
-                        
                         canGoBack = view?.canGoBack() == true
+                    }
+
+                    // 1. Intercept errors on newer Android versions (API 23+)
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?,
+                        error: android.webkit.WebResourceError?
+                    ) {
+                        super.onReceivedError(view, request, error)
+                        // Only show error page if the main website failed to load (not just an image)
+                        if (request?.isForMainFrame == true) {
+                            showCustomErrorPage(view)
+                        }
+                    }
+
+                    // 2. Intercept errors on older Android versions
+                    @Deprecated("Deprecated in Java")
+                    override fun onReceivedError(
+                        view: WebView?,
+                        errorCode: Int,
+                        description: String?,
+                        failingUrl: String?
+                    ) {
+                        super.onReceivedError(view, errorCode, description, failingUrl)
+                        showCustomErrorPage(view)
+                    }
+                    
+                    // 3. The Custom Error Page HTML Generator
+                    private fun showCustomErrorPage(view: WebView?) {
+                        val errorHtml = """
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                                <style>
+                                    body {
+                                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                                        display: flex;
+                                        flex-direction: column;
+                                        align-items: center;
+                                        justify-content: center;
+                                        height: 80vh;
+                                        text-align: center;
+                                        background-color: #F8FAFC;
+                                        padding: 30px;
+                                        margin: 0;
+                                        color: #1E293B;
+                                    }
+                                    .icon { font-size: 64px; margin-bottom: 20px; }
+                                    .title { font-size: 22px; font-weight: bold; margin-bottom: 12px; }
+                                    .subtitle { font-size: 15px; color: #64748B; line-height: 1.5; }
+                                </style>
+                            </head>
+                            <body>
+                                <div class="icon">📡</div>
+                                <div class="title">Oops! Connection Lost</div>
+                                <div class="subtitle">We couldn't reach the study materials. Please check your internet connection and try again.</div>
+                            </body>
+                            </html>
+                        """.trimIndent()
+                        
+                        // Load this custom HTML instead of the default Android error page
+                        view?.loadDataWithBaseURL(null, errorHtml, "text/html", "UTF-8", null)
                     }
                 }
                 
@@ -324,10 +383,10 @@ fun LocalStudyMaterialScreen() {
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     allowFileAccess = true 
+                    cacheMode = WebSettings.LOAD_NO_CACHE
                 }
                 loadUrl("https://jcv-mock-tests.web.app/studymaterial/")
                 
-    
                 webViewRef = this
             }
         }
