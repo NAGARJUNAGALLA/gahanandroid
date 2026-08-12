@@ -29,9 +29,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -46,7 +48,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import androidx.compose.ui.text.style.TextOverflow
 
 data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
 data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
@@ -81,14 +82,24 @@ fun CourseDetailScreen(
     var courseTitle by remember { mutableStateOf("Course") }
     var courseDuration by remember { mutableIntStateOf(1) }
     
-    // NEW: Variable to hold the specific Study Material URL from Firebase
     var studyMaterialUrl by remember { mutableStateOf("") }
     var showStudyMaterialWebView by remember { mutableStateOf(false) }
+    var currentContentFolder by remember { mutableStateOf<String?>(null) }
     
     var paymentStatus by remember { mutableStateOf<String?>(null) }
     var subscriptionExpiry by remember { mutableStateOf<Date?>(null) } 
     var showPaymentDialog by remember { mutableStateOf(false) }
     var isSubmittingPayment by remember { mutableStateOf(false) }
+
+    // Reset folder view when changing tabs
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != 1) currentContentFolder = null
+    }
+
+    // Hardware Back Button handler for folders inside the Content Tab
+    BackHandler(enabled = (selectedTab == 1 && currentContentFolder != null && !showStudyMaterialWebView)) {
+        currentContentFolder = null
+    }
 
     LaunchedEffect(courseId) {
         val db = FirebaseFirestore.getInstance()
@@ -110,7 +121,6 @@ fun CourseDetailScreen(
                 courseTitle = matchedCourse["title"] as? String ?: "Course"
                 courseFee = (matchedCourse["fee"]?.toString()?.toDoubleOrNull()) ?: 0.0
                 courseDuration = (matchedCourse["durationMonths"] as? Number)?.toInt() ?: 1
-                // NEW: Fetch the URL if it exists
                 studyMaterialUrl = matchedCourse["studyMaterialUrl"] as? String ?: ""
             }
         }
@@ -274,6 +284,9 @@ fun CourseDetailScreen(
             }
 
             if (selectedTab == 0) {
+                // =======================================================
+                // TAB 0: OVERVIEW
+                // =======================================================
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -299,30 +312,6 @@ fun CourseDetailScreen(
                     
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // NEW: STUDY MATERIAL SMART BUTTON
-                    if (studyMaterialUrl.isNotBlank()) {
-                        Button(
-                            onClick = {
-                                if (courseFee == 0.0 || paymentStatus == "approved") {
-                                    showStudyMaterialWebView = true
-                                } else {
-                                    Toast.makeText(context, "Please unlock the course to access Study Materials.", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(55.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (courseFee == 0.0 || paymentStatus == "approved") themePrimaryColor else MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = if (courseFee == 0.0 || paymentStatus == "approved") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        ) {
-                            Icon(if (courseFee == 0.0 || paymentStatus == "approved") Icons.Default.MenuBook else Icons.Default.Lock, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Read Study Material", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
-                        Spacer(modifier = Modifier.height(24.dp))
-                    }
-
                     if (paymentStatus == "approved") {
                         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
                             Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -347,7 +336,7 @@ fun CourseDetailScreen(
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)) {
-                            Text("View Mock Tests", fontWeight = FontWeight.Bold)
+                            Text("View Course Content", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -383,55 +372,99 @@ fun CourseDetailScreen(
                         }
                     } else {
                         if (selectedTab == 1) {
-                            if (tests.isEmpty()) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No tests found for this course.", color = Color.Gray) }
-                            else {
-                                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // =======================================================
+                            // TAB 1: CONTENT (DYNAMIC FOLDERS)
+                            // =======================================================
+                            if (tests.isEmpty() && studyMaterialUrl.isBlank()) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
+                                    Text("No content found for this course yet.", color = Color.Gray) 
+                                }
+                            } else if (currentContentFolder == null) {
+                                // --- MAIN FOLDER VIEW ---
+                                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                                     if (subscriptionExpiry != null) {
-                                        item {
-                                            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
-                                                Text(text = "Active Subscription: Valid until ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(subscriptionExpiry!!)}", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp).fillMaxWidth(), fontSize = 13.sp)
+                                        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
+                                            Text(text = "Active Subscription: Valid until ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(subscriptionExpiry!!)}", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp).fillMaxWidth(), fontSize = 13.sp)
+                                        }
+                                    }
+
+                                    if (studyMaterialUrl.isNotBlank()) {
+                                        FolderCard(
+                                            title = "Study Material",
+                                            icon = Icons.Default.Folder,
+                                            themeColor = themePrimaryColor
+                                        ) {
+                                            if (courseFee == 0.0 || paymentStatus == "approved") {
+                                                showStudyMaterialWebView = true
+                                            } else {
+                                                Toast.makeText(context, "Please unlock the course to access Study Materials.", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
 
-                                    items(tests) { test ->
-                                        val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
-                                        val testScore = localStorage.getTestScore(courseId, test.name)
-                                        
-                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(24.dp)) {
-                                            Column(modifier = Modifier.padding(16.dp)) {
-                                                Text(text = test.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                                Spacer(modifier = Modifier.height(12.dp))
-                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(Icons.Default.List, contentDescription = "Questions", modifier = Modifier.size(16.dp), tint = Color.Gray)
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
-                                                    }
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(Icons.Default.DateRange, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                                Divider(color = MaterialTheme.colorScheme.surfaceVariant)
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                                
-                                                if (alreadyAttempted && testScore != null) {
-                                                    val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
+                                    if (tests.isNotEmpty()) {
+                                        FolderCard(
+                                            title = "Mock Tests",
+                                            icon = Icons.Default.Folder,
+                                            themeColor = themePrimaryColor
+                                        ) {
+                                            currentContentFolder = "MOCK_TESTS"
+                                        }
+                                    }
+                                }
+                            } else if (currentContentFolder == "MOCK_TESTS") {
+                                // --- MOCK TESTS LIST VIEW ---
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(onClick = { currentContentFolder = null }) {
+                                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = themePrimaryColor)
+                                        }
+                                        Text("Mock Tests", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onBackground)
+                                    }
+
+                                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        items(tests) { test ->
+                                            val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
+                                            val testScore = localStorage.getTestScore(courseId, test.name)
+                                            
+                                            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(24.dp)) {
+                                                Column(modifier = Modifier.padding(16.dp)) {
+                                                    Text(text = test.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                                    Spacer(modifier = Modifier.height(12.dp))
                                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                        Column {
-                                                            Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-                                                            Text(text = "${formatScore(testScore.first)} / ${formatScore(testScore.second)}", color = Color(0xFF27AE60), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(Icons.Default.List, contentDescription = "Questions", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                                                         }
-                                                        OutlinedButton(onClick = { onNavigateToExam(courseId, test.name, true) }, colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor), shape = RoundedCornerShape(50)) {
-                                                            Text("Review Test", fontWeight = FontWeight.Bold)
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(Icons.Default.DateRange, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                                                         }
                                                     }
-                                                } else {
-                                                    Button(onClick = { onNavigateToExam(courseId, test.name, false) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)) {
-                                                        Text("Take Test", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                    Spacer(modifier = Modifier.height(16.dp))
+                                                    Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                                                    Spacer(modifier = Modifier.height(16.dp))
+                                                    
+                                                    if (alreadyAttempted && testScore != null) {
+                                                        val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
+                                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                            Column {
+                                                                Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                                                Text(text = "${formatScore(testScore.first)} / ${formatScore(testScore.second)}", color = Color(0xFF27AE60), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                                            }
+                                                            OutlinedButton(onClick = { onNavigateToExam(courseId, test.name, true) }, colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor), shape = RoundedCornerShape(50)) {
+                                                                Text("Review Test", fontWeight = FontWeight.Bold)
+                                                            }
+                                                        }
+                                                    } else {
+                                                        Button(onClick = { onNavigateToExam(courseId, test.name, false) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)) {
+                                                            Text("Take Test", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                        }
                                                     }
                                                 }
                                             }
@@ -440,6 +473,9 @@ fun CourseDetailScreen(
                                 }
                             }
                         } else if (selectedTab == 2) {
+                            // =======================================================
+                            // TAB 2: SAVED
+                            // =======================================================
                             if (bookmarkedQuestions.isEmpty()) {
                                 Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
@@ -485,6 +521,38 @@ fun CourseDetailScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+// NEW: Helper Composable for the sleek Folder UI
+@Composable
+fun FolderCard(title: String, icon: ImageVector, themeColor: Color, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(2.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(themeColor.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = title, tint = themeColor, modifier = Modifier.size(28.dp))
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = Color.Gray)
         }
     }
 }
