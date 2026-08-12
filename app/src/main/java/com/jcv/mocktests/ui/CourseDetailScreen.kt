@@ -46,6 +46,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.text.style.TextOverflow
 
 data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
 data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
