@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -60,7 +59,6 @@ data class BookmarkedQuestion(val testName: String, val sectionName: String, val
 fun CourseDetailScreen(
     courseId: String,
     onNavigateToExam: (courseId: String, testName: String, isReviewMode: Boolean) -> Unit,
-    onNavigateToStudyMaterial: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val themePrimaryColor = MaterialTheme.colorScheme.primary
@@ -94,12 +92,10 @@ fun CourseDetailScreen(
     var showPaymentDialog by remember { mutableStateOf(false) }
     var isSubmittingPayment by remember { mutableStateOf(false) }
 
-    // Reset folder view when changing tabs
     LaunchedEffect(selectedTab) {
         if (selectedTab != 1) currentContentFolder = null
     }
 
-    // Hardware Back Button handler for folders inside the Content Tab
     BackHandler(enabled = (selectedTab == 1 && currentContentFolder != null && !showStudyMaterialWebView)) {
         currentContentFolder = null
     }
@@ -206,9 +202,6 @@ fun CourseDetailScreen(
         }
     }
 
-    // =======================================================
-    // IN-SCREEN WEBVIEW (OVERLAYS THE COURSE WHEN OPENED)
-    // =======================================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
@@ -245,13 +238,7 @@ fun CourseDetailScreen(
                             javaScriptEnabled = true
                             domStorageEnabled = true
                             databaseEnabled = true
-                            
-                            // SMART CACHE LOGIC: Live updates when online, offline mode when offline
-                            cacheMode = if (isOnline(ctx)) {
-                                WebSettings.LOAD_NO_CACHE
-                            } else {
-                                WebSettings.LOAD_CACHE_ELSE_NETWORK
-                            }
+                            cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
                         }
                         loadUrl(studyMaterialUrl)
                         webViewRef = this
@@ -259,35 +246,31 @@ fun CourseDetailScreen(
                 }
             )
         }
-        return // Early return so the rest of the course screen doesn't draw underneath
+        return
     }
 
-    // =======================================================
-    // MAIN COURSE DETAILS UI
-    // =======================================================
     Scaffold(
         topBar = {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(CourseHeaderShape) // <--- APPLY CUSTOM SHAPE HERE
-            .background(primaryGradient)
-    ) {
-        Column {
-            TopAppBar(
-                title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { 
-                    IconButton(onClick = onNavigateBack) { 
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
-            // Increased spacer to push the blue background deep enough for the wave
-            Spacer(modifier = Modifier.height(48.dp))
+            // FIXED HEADER WITH EXACT SHAPE AND PADDING
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(bottomEnd = 120.dp))
+                    .background(primaryGradient)
+            ) {
+                Column(
+                    modifier = Modifier.padding(bottom = 32.dp)
+                ) {
+                    TopAppBar(
+                        title = { Text("Course Details", color = Color.White) },
+                        navigationIcon = { 
+                            IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    )
+                }
+            }
         }
-    }
-}
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
@@ -300,9 +283,6 @@ fun CourseDetailScreen(
             }
 
             if (selectedTab == 0) {
-                // =======================================================
-                // TAB 0: OVERVIEW
-                // =======================================================
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -388,15 +368,11 @@ fun CourseDetailScreen(
                         }
                     } else {
                         if (selectedTab == 1) {
-                            // =======================================================
-                            // TAB 1: CONTENT (DYNAMIC FOLDERS)
-                            // =======================================================
                             if (tests.isEmpty() && studyMaterialUrl.isBlank()) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
                                     Text("No content found for this course yet.", color = Color.Gray) 
                                 }
                             } else if (currentContentFolder == null) {
-                                // --- MAIN FOLDER VIEW ---
                                 Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                                     if (subscriptionExpiry != null) {
                                         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
@@ -429,7 +405,6 @@ fun CourseDetailScreen(
                                     }
                                 }
                             } else if (currentContentFolder == "MOCK_TESTS") {
-                                // --- MOCK TESTS LIST VIEW ---
                                 Column(modifier = Modifier.fillMaxSize()) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
@@ -489,9 +464,6 @@ fun CourseDetailScreen(
                                 }
                             }
                         } else if (selectedTab == 2) {
-                            // =======================================================
-                            // TAB 2: SAVED
-                            // =======================================================
                             if (bookmarkedQuestions.isEmpty()) {
                                 Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
@@ -541,7 +513,6 @@ fun CourseDetailScreen(
     }
 }
 
-// Helper Composable for the sleek Folder UI
 @Composable
 fun FolderCard(title: String, icon: ImageVector, themeColor: Color, onClick: () -> Unit) {
     Card(
@@ -651,7 +622,6 @@ fun PaymentDialog(
     )
 }
 
-// SMART CACHE HELPER: Checks if the phone has an active internet connection
 fun isOnline(context: Context): Boolean {
     val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     val network = connectivityManager.activeNetwork ?: return false
@@ -661,16 +631,4 @@ fun isOnline(context: Context): Boolean {
         activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
         else -> false
     }
-}
-val CourseHeaderShape = GenericShape { size, _ ->
-    moveTo(0f, 0f)
-    lineTo(size.width, 0f)
-    lineTo(size.width, size.height)       // Right side extends fully down
-    
-    // Smoothly curve upwards to the shorter left side
-    quadraticBezierTo(
-        size.width * 0.5f, size.height, // Control point pulls the curve DOWN
-        0f, size.height - 120f            // Left side is cut shorter
-    )
-    close()
 }
