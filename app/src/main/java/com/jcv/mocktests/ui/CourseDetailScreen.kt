@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -269,8 +270,7 @@ fun CourseDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            // Increased to 60.dp for a dramatic bottom-right curve
-            .clip(RoundedCornerShape(bottomEnd = 60.dp))
+            .clip(CourseHeaderShape) // <--- APPLY CUSTOM SHAPE HERE
             .background(primaryGradient)
     ) {
         Column {
@@ -283,8 +283,8 @@ fun CourseDetailScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-            // Stretches the blue background down to reveal the curve!
-            Spacer(modifier = Modifier.height(24.dp))
+            // Increased spacer to push the blue background deep enough for the wave
+            Spacer(modifier = Modifier.height(48.dp))
         }
     }
 }
@@ -661,4 +661,16 @@ fun isOnline(context: Context): Boolean {
         activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
         else -> false
     }
+}
+val CourseHeaderShape = GenericShape { size, _ ->
+    moveTo(0f, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width, size.height)       // Right side extends fully down
+    
+    // Smoothly curve upwards to the shorter left side
+    quadraticBezierTo(
+        size.width * 0.5f, size.height, // Control point pulls the curve DOWN
+        0f, size.height - 120f            // Left side is cut shorter
+    )
+    close()
 }
