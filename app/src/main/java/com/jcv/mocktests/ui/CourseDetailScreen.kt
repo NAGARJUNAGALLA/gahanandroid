@@ -3,7 +3,12 @@ package com.jcv.mocktests.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.ViewGroup
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
@@ -52,7 +58,6 @@ fun CourseDetailScreen(
     onNavigateToStudyMaterial: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    // Dynamically grab the theme colors
     val themePrimaryColor = MaterialTheme.colorScheme.primary
     val primaryGradient = Brush.horizontalGradient(listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor))
 
@@ -74,6 +79,10 @@ fun CourseDetailScreen(
     var courseFee by remember { mutableDoubleStateOf(0.0) }
     var courseTitle by remember { mutableStateOf("Course") }
     var courseDuration by remember { mutableIntStateOf(1) }
+    
+    // NEW: Variable to hold the specific Study Material URL from Firebase
+    var studyMaterialUrl by remember { mutableStateOf("") }
+    var showStudyMaterialWebView by remember { mutableStateOf(false) }
     
     var paymentStatus by remember { mutableStateOf<String?>(null) }
     var subscriptionExpiry by remember { mutableStateOf<Date?>(null) } 
@@ -100,29 +109,31 @@ fun CourseDetailScreen(
                 courseTitle = matchedCourse["title"] as? String ?: "Course"
                 courseFee = (matchedCourse["fee"]?.toString()?.toDoubleOrNull()) ?: 0.0
                 courseDuration = (matchedCourse["durationMonths"] as? Number)?.toInt() ?: 1
+                // NEW: Fetch the URL if it exists
+                studyMaterialUrl = matchedCourse["studyMaterialUrl"] as? String ?: ""
             }
         }
 
         if (uid != null) {
             db.collection("pending_registrations").whereEqualTo("uid", uid).whereEqualTo("sheetId", courseId).addSnapshotListener { snap, _ ->
-                    if (snap != null && !snap.isEmpty) {
-                        val latestDoc = snap.documents.maxByOrNull { it.getTimestamp("createdAt")?.toDate()?.time ?: 0L }
-                        paymentStatus = latestDoc?.getString("status")
-                        if (paymentStatus == "approved") {
-                            val createdAt = latestDoc?.getTimestamp("createdAt")?.toDate()
-                            val savedDuration = (latestDoc?.get("durationMonths") as? Number)?.toInt() ?: courseDuration
-                            if (createdAt != null) {
-                                val calendar = Calendar.getInstance()
-                                calendar.time = createdAt
-                                calendar.add(Calendar.MONTH, savedDuration)
-                                subscriptionExpiry = calendar.time
-                                if (Date().after(subscriptionExpiry)) paymentStatus = "expired"
-                            }
+                if (snap != null && !snap.isEmpty) {
+                    val latestDoc = snap.documents.maxByOrNull { it.getTimestamp("createdAt")?.toDate()?.time ?: 0L }
+                    paymentStatus = latestDoc?.getString("status")
+                    if (paymentStatus == "approved") {
+                        val createdAt = latestDoc?.getTimestamp("createdAt")?.toDate()
+                        val savedDuration = (latestDoc?.get("durationMonths") as? Number)?.toInt() ?: courseDuration
+                        if (createdAt != null) {
+                            val calendar = Calendar.getInstance()
+                            calendar.time = createdAt
+                            calendar.add(Calendar.MONTH, savedDuration)
+                            subscriptionExpiry = calendar.time
+                            if (Date().after(subscriptionExpiry)) paymentStatus = "expired"
                         }
-                    } else {
-                        paymentStatus = null; subscriptionExpiry = null
                     }
+                } else {
+                    paymentStatus = null; subscriptionExpiry = null
                 }
+            }
         }
 
         db.collection("pro_course_questions").document(courseId).get()
@@ -181,6 +192,58 @@ fun CourseDetailScreen(
         }
     }
 
+    // =======================================================
+    // IN-SCREEN WEBVIEW (OVERLAYS THE COURSE WHEN OPENED)
+    // =======================================================
+    if (showStudyMaterialWebView) {
+        var webViewRef by remember { mutableStateOf<WebView?>(null) }
+        var canGoBack by remember { mutableStateOf(false) }
+
+        BackHandler {
+            if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    navigationIcon = { 
+                        IconButton(onClick = { if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false }) { 
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = themePrimaryColor)
+                )
+            }
+        ) { padding ->
+            AndroidView(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                        webViewClient = object : WebViewClient() {
+                            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                super.doUpdateVisitedHistory(view, url, isReload)
+                                canGoBack = view?.canGoBack() == true
+                            }
+                        }
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                        }
+                        loadUrl(studyMaterialUrl)
+                        webViewRef = this
+                    }
+                }
+            )
+        }
+        return // Early return so the rest of the course screen doesn't draw underneath
+    }
+
+    // =======================================================
+    // MAIN COURSE DETAILS UI
+    // =======================================================
     Scaffold(
         topBar = {
             Box(
@@ -213,7 +276,7 @@ fun CourseDetailScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Comprehensive mock tests designed to help you prepare and excel.", color = Color.Gray)
+                    Text("Comprehensive mock tests and materials designed to help you prepare and excel.", color = Color.Gray)
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     val totalQs = tests.sumOf { it.questionCount }
@@ -234,6 +297,30 @@ fun CourseDetailScreen(
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
+
+                    // NEW: STUDY MATERIAL SMART BUTTON
+                    if (studyMaterialUrl.isNotBlank()) {
+                        Button(
+                            onClick = {
+                                if (courseFee == 0.0 || paymentStatus == "approved") {
+                                    showStudyMaterialWebView = true
+                                } else {
+                                    Toast.makeText(context, "Please unlock the course to access Study Materials.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(55.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (courseFee == 0.0 || paymentStatus == "approved") themePrimaryColor else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (courseFee == 0.0 || paymentStatus == "approved") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Icon(if (courseFee == 0.0 || paymentStatus == "approved") Icons.Default.MenuBook else Icons.Default.Lock, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Read Study Material", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
 
                     if (paymentStatus == "approved") {
                         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
@@ -259,7 +346,7 @@ fun CourseDetailScreen(
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)) {
-                            Text("Unlock Course Content", fontWeight = FontWeight.Bold)
+                            Text("View Mock Tests", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
