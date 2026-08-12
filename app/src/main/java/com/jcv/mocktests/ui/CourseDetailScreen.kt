@@ -202,6 +202,7 @@ fun CourseDetailScreen(
         }
     }
 
+    // WEBVIEW SCAFFOLD
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
@@ -212,21 +213,23 @@ fun CourseDetailScreen(
 
         Scaffold(
             topBar = {
-            // Clean Rectangular Header
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(primaryGradient)
-            ) {
-                TopAppBar(
-                    title = { Text("Course Details", color = Color.White) },
-                    navigationIcon = { 
-                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
+                // CLEAN RECTANGULAR HEADER FOR WEBVIEW
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(primaryGradient)
+                ) {
+                    TopAppBar(
+                        title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        navigationIcon = { 
+                            IconButton(onClick = { if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false }) { 
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    )
+                }
             }
-        }
         ) { padding ->
             AndroidView(
                 modifier = Modifier.fillMaxSize().padding(padding),
@@ -254,26 +257,22 @@ fun CourseDetailScreen(
         return
     }
 
+    // MAIN COURSE DETAILS SCAFFOLD
     Scaffold(
         topBar = {
-            // FIXED HEADER WITH EXACT SHAPE AND PADDING
+            // CLEAN RECTANGULAR HEADER FOR COURSE DETAILS
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(bottomEnd = 120.dp))
                     .background(primaryGradient)
             ) {
-                Column(
-                    modifier = Modifier.padding(bottom = 32.dp)
-                ) {
-                    TopAppBar(
-                        title = { Text("Course Details", color = Color.White) },
-                        navigationIcon = { 
-                            IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                    )
-                }
+                TopAppBar(
+                    title = { Text("Course Details", color = Color.White) },
+                    navigationIcon = { 
+                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
             }
         }
     ) { padding ->
