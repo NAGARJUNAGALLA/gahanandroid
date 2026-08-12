@@ -234,8 +234,7 @@ fun MainDashboardScreen(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-    
-            .clip(RoundedCornerShape(bottomStart = 60.dp))
+            .clip(DashboardHeaderShape) // <--- APPLY CUSTOM SHAPE HERE
             .background(primaryGradient)
     ) {
         Column {
@@ -250,7 +249,7 @@ fun MainDashboardScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .padding(end = 8.dp) // Added padding to distance from the edge
+                            .padding(end = 8.dp)
                             .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50))
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
@@ -261,11 +260,11 @@ fun MainDashboardScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-            // THIS IS THE SECRET: This pushes the blue background down to reveal the curve!
-            Spacer(modifier = Modifier.height(24.dp))
+            // Increased spacer to push the blue background deep enough for the wave
+            Spacer(modifier = Modifier.height(48.dp)) 
         }
     }
-},
+}
             bottomBar = {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface, 
