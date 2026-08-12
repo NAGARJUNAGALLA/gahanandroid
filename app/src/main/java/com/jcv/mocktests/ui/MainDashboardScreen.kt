@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -49,6 +50,7 @@ import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
 import kotlinx.coroutines.launch
+
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES, STUDY_MATERIAL }
 
@@ -558,4 +560,16 @@ fun CourseTag(text: String) {
     Box(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
         Text(text = text, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
     }
+}
+val DashboardHeaderShape = GenericShape { size, _ ->
+    moveTo(0f, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width, size.height - 120f) // Right side is cut shorter
+    
+    // Smoothly curve downwards to the bottom-left corner
+    quadraticBezierTo(
+        size.width * 0.5f, size.height, // Control point pulls the curve DOWN
+        0f, size.height                   // Left side extends fully down
+    )
+    close()
 }
