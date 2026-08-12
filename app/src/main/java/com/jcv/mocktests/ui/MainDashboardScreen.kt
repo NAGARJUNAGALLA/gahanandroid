@@ -226,34 +226,32 @@ fun MainDashboardScreen(
     ) {
         Scaffold(
             topBar = {
-                // FIXED HEADER WITH EXACT SHAPE AND PADDING
+                // Clean Rectangular Header
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(bottomStart = 120.dp))
                         .background(primaryGradient)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(bottom = 32.dp)
-                    ) {
-                        TopAppBar(
-                            title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
-                            navigationIcon = {
-                                IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) }
-                            },
-                            actions = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(end = 16.dp).background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text("🔥", fontSize = 16.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                        )
-                    }
+                    TopAppBar(
+                        title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) }
+                        },
+                        actions = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .padding(end = 16.dp)
+                                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text("🔥", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    )
                 }
             },
             bottomBar = {
