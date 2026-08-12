@@ -2,6 +2,8 @@ package com.jcv.mocktests.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.WebSettings
@@ -241,7 +243,14 @@ fun CourseDetailScreen(
                         settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
-                            cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                            databaseEnabled = true
+                            
+                            // SMART CACHE LOGIC: Live updates when online, offline mode when offline
+                            cacheMode = if (isOnline(ctx)) {
+                                WebSettings.LOAD_NO_CACHE
+                            } else {
+                                WebSettings.LOAD_CACHE_ELSE_NETWORK
+                            }
                         }
                         loadUrl(studyMaterialUrl)
                         webViewRef = this
@@ -525,7 +534,7 @@ fun CourseDetailScreen(
     }
 }
 
-// NEW: Helper Composable for the sleek Folder UI
+// Helper Composable for the sleek Folder UI
 @Composable
 fun FolderCard(title: String, icon: ImageVector, themeColor: Color, onClick: () -> Unit) {
     Card(
@@ -633,4 +642,16 @@ fun PaymentDialog(
         },
         dismissButton = null
     )
+}
+
+// SMART CACHE HELPER: Checks if the phone has an active internet connection
+fun isOnline(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork ?: return false
+    val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
+    return when {
+        activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+        activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+        else -> false
+    }
 }
