@@ -74,6 +74,7 @@ fun CourseDetailScreen(
     
     var tests by remember { mutableStateOf<List<TestSummary>>(emptyList()) }
     var bookmarkedQuestions by remember { mutableStateOf<List<BookmarkedQuestion>>(emptyList()) }
+    var courseSubjects by remember { mutableStateOf<List<String>>(emptyList()) } // NEW: Stores dynamic subject names
     var isLoading by remember { mutableStateOf(true) }
 
     var upiId by remember { mutableStateOf("") }
@@ -152,10 +153,17 @@ fun CourseDetailScreen(
                     val testsMap = doc.data?.get("tests") as? Map<String, Any>
                     val parsedTests = mutableListOf<TestSummary>()
                     val parsedBookmarks = mutableListOf<BookmarkedQuestion>()
+                    val subjectsSet = mutableSetOf<String>() // NEW: Collects unique subject names
                     
                     testsMap?.forEach { (testName, testData) ->
                         var qCount = 0
                         val specificTest = testData as? Map<String, List<Map<String, Any>>>
+                        
+                        // Dynamically extract the section/subject names from Firebase
+                        specificTest?.keys?.forEach { subjectName ->
+                            subjectsSet.add(subjectName)
+                        }
+
                         try { specificTest?.forEach { (_, qList) -> qCount += qList.size } } catch (e: Exception) { }
                         parsedTests.add(TestSummary(name = testName, questionCount = qCount, timeMinutes = qCount))
 
@@ -184,6 +192,7 @@ fun CourseDetailScreen(
                     }
                     tests = parsedTests
                     bookmarkedQuestions = parsedBookmarks 
+                    courseSubjects = subjectsSet.toList() // Save the dynamic subjects to state
                 }
                 isLoading = false
             }.addOnFailureListener { isLoading = false }
@@ -213,7 +222,6 @@ fun CourseDetailScreen(
 
         Scaffold(
             topBar = {
-                // CLEAN RECTANGULAR HEADER FOR WEBVIEW
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -260,7 +268,6 @@ fun CourseDetailScreen(
     // MAIN COURSE DETAILS SCAFFOLD
     Scaffold(
         topBar = {
-            // CLEAN RECTANGULAR HEADER FOR COURSE DETAILS
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -276,7 +283,7 @@ fun CourseDetailScreen(
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
             TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -295,6 +302,7 @@ fun CourseDetailScreen(
                     
                     val totalQs = tests.sumOf { it.questionCount }
                     
+                    // TOTALS CARD
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Card(modifier = Modifier.weight(1f).padding(end = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
                             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -311,6 +319,114 @@ fun CourseDetailScreen(
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
+
+                    // ==========================================
+                    // ANALYTICS & SUBJECT BREAKDOWN ENGINE
+                    // ==========================================
+                    var attemptedCount = 0
+                    var totalAchievedScore = 0f
+                    var totalPossibleScore = 0f
+
+                    tests.forEach { test ->
+                        if (localStorage.isTestAttempted(courseId, test.name)) {
+                            attemptedCount++
+                            val score = localStorage.getTestScore(courseId, test.name)
+                            if (score != null) {
+                                totalAchievedScore += score.first
+                                totalPossibleScore += score.second
+                            }
+                        }
+                    }
+
+                    // Only show Analytics if they've attempted at least 1 test
+                    if (attemptedCount > 0) {
+                        val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
+                        val accuracy = if (totalPossibleScore > 0) ((totalAchievedScore / totalPossibleScore) * 100).toInt() else 0
+                        val accuracyColor = if (accuracy >= 70) Color(0xFF2E7D32) else if (accuracy >= 40) Color(0xFFE67E22) else Color(0xFFC62828)
+
+                        Text("Your Performance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(2.dp),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                // Progress Bar
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Tests Completed", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                    Text("$attemptedCount / ${tests.size}", fontWeight = FontWeight.Black, color = themePrimaryColor, fontSize = 14.sp)
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                LinearProgressIndicator(
+                                    progress = attemptedCount.toFloat() / tests.size.coerceAtLeast(1).toFloat(),
+                                    modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                                    color = themePrimaryColor,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                
+                                Spacer(modifier = Modifier.height(20.dp))
+                                Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                                Spacer(modifier = Modifier.height(20.dp))
+                                
+                                // Stats Row
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Overall Score", fontSize = 12.sp, color = Color.Gray)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("${formatScore(totalAchievedScore)} / ${formatScore(totalPossibleScore)}", fontSize = 22.sp, fontWeight = FontWeight.Black, color = themePrimaryColor)
+                                    }
+                                    Divider(modifier = Modifier.height(40.dp).width(1.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Accuracy", fontSize = 12.sp, color = Color.Gray)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("$accuracy%", fontSize = 22.sp, fontWeight = FontWeight.Black, color = accuracyColor)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // SUBJECT ANALYSIS SECTION
+                        if (courseSubjects.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text("Subject Analysis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(2.dp),
+                                shape = RoundedCornerShape(24.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(20.dp)) {
+                                    courseSubjects.forEachIndexed { index, subject ->
+                                        // Placeholder logic: Uses overall accuracy until LocalStorage provides subject scores
+                                        val displayProgress = accuracy / 100f
+                                        
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text(subject.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                            Text("$accuracy%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accuracyColor)
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        LinearProgressIndicator(
+                                            progress = displayProgress,
+                                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                                            color = accuracyColor,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        if (index < courseSubjects.size - 1) {
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                    // ==========================================
+
 
                     if (paymentStatus == "approved") {
                         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
@@ -338,6 +454,7 @@ fun CourseDetailScreen(
                         OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)) {
                             Text("View Course Content", fontWeight = FontWeight.Bold)
                         }
+                        Spacer(modifier = Modifier.height(24.dp)) // Extra padding at bottom for smooth scrolling
                     }
                 }
             } else {
