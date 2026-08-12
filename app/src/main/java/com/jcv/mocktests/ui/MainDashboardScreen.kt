@@ -229,31 +229,41 @@ fun MainDashboardScreen(
     ) {
         Scaffold(
             topBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(bottomStart = 40.dp))
-                        .background(primaryGradient)
-                ) {
-                    TopAppBar(
-                        title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) }
-                        },
-                        actions = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text("🔥", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                    )
-                }
-            },
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+    
+            .clip(RoundedCornerShape(bottomStart = 60.dp))
+            .background(primaryGradient)
+    ) {
+        Column {
+            TopAppBar(
+                title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) { 
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) 
+                    }
+                },
+                actions = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(end = 8.dp) // Added padding to distance from the edge
+                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("🔥", fontSize = 16.sp)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+            // THIS IS THE SECRET: This pushes the blue background down to reveal the curve!
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+},
             bottomBar = {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface, 
