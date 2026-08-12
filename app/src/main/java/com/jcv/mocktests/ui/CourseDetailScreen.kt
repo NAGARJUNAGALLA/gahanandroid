@@ -212,16 +212,21 @@ fun CourseDetailScreen(
 
         Scaffold(
             topBar = {
+            // Clean Rectangular Header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(primaryGradient)
+            ) {
                 TopAppBar(
-                    title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    title = { Text("Course Details", color = Color.White) },
                     navigationIcon = { 
-                        IconButton(onClick = { if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false }) { 
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
-                        }
+                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = themePrimaryColor)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             }
+        }
         ) { padding ->
             AndroidView(
                 modifier = Modifier.fillMaxSize().padding(padding),
