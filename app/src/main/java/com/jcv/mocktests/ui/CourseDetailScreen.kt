@@ -266,21 +266,28 @@ fun CourseDetailScreen(
     // =======================================================
     Scaffold(
         topBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(bottomEnd = 40.dp))
-                    .background(primaryGradient)
-            ) {
-                TopAppBar(
-                    title = { Text("Course Details", color = Color.White) },
-                    navigationIcon = { 
-                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Increased to 60.dp for a dramatic bottom-right curve
+            .clip(RoundedCornerShape(bottomEnd = 60.dp))
+            .background(primaryGradient)
+    ) {
+        Column {
+            TopAppBar(
+                title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = { 
+                    IconButton(onClick = onNavigateBack) { 
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+            // Stretches the blue background down to reveal the curve!
+            Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
