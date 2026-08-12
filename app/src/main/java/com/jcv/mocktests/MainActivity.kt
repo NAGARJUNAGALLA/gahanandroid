@@ -170,7 +170,7 @@ fun MockTestsApp() {
                         val encodedTestName = URLEncoder.encode(testName, "UTF-8")
                         navController.navigate("exam/$cId/$encodedTestName/$isReviewMode") 
                     },
-                    onNavigateToStudyMaterial = { navController.navigate("main_dashboard/home") { popUpTo(0) } },
+                    
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
