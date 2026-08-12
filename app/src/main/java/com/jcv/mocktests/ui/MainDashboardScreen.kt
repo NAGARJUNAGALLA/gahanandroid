@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -46,11 +45,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.R
 import com.jcv.mocktests.utils.LocalStorage
 import kotlinx.coroutines.launch
-
 
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES, STUDY_MATERIAL }
 
@@ -87,7 +84,6 @@ fun MainDashboardScreen(
     
     val context = LocalContext.current
     val activity = context as? Activity
-    val prefs = remember { context.getSharedPreferences("JcvAppCache", Context.MODE_PRIVATE) }
     val localStorage = remember { LocalStorage(context) }
     val localDeviceId = remember { localStorage.getOrCreateDeviceId() }
     
@@ -167,8 +163,7 @@ fun MainDashboardScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        // ONLY allows swipe-to-close. Swipe-to-open from the edge is completely disabled!
-        gesturesEnabled = drawerState.isOpen, 
+        gesturesEnabled = false, 
         drawerContent = {
             ModalDrawerSheet(modifier = Modifier.width(300.dp), drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -231,40 +226,36 @@ fun MainDashboardScreen(
     ) {
         Scaffold(
             topBar = {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(DashboardHeaderShape) // <--- APPLY CUSTOM SHAPE HERE
-            .background(primaryGradient)
-    ) {
-        Column {
-            TopAppBar(
-                title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) { 
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) 
-                    }
-                },
-                actions = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                // FIXED HEADER WITH EXACT SHAPE AND PADDING
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(bottomStart = 120.dp))
+                        .background(primaryGradient)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(bottom = 32.dp)
                     ) {
-                        Text("🔥", fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        TopAppBar(
+                            title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
+                            navigationIcon = {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) }
+                            },
+                            actions = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(end = 16.dp).background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("🔥", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
-            // Increased spacer to push the blue background deep enough for the wave
-            Spacer(modifier = Modifier.height(48.dp)) 
-        }
-    }
-}
+                }
+            },
             bottomBar = {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface, 
@@ -293,8 +284,8 @@ fun MainDashboardScreen(
             Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(MaterialTheme.colorScheme.background)) { 
                 when (selectedTab) {
                     BottomTab.HOME -> DashboardHomeContent(allCourses, purchasedCourses, proCourses, approvedSheetIds, auth, isLoading, isDarkMode) { onNavigateToCourse(it.sheetId) }
-                    BottomTab.PRO_COURSES -> if (isLoading && proCourses.isEmpty()) LoadingLogo() else CourseGridScreen("Pro Courses", proCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
-                    BottomTab.PURCHASED_COURSES -> if (isLoading && purchasedCourses.isEmpty()) LoadingLogo() else CourseGridScreen("Purchased Courses", purchasedCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
+                    BottomTab.PRO_COURSES -> if (isLoading && proCourses.isEmpty()) LoadingLogo(themePrimaryColor) else CourseGridScreen("Pro Courses", proCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
+                    BottomTab.PURCHASED_COURSES -> if (isLoading && purchasedCourses.isEmpty()) LoadingLogo(themePrimaryColor) else CourseGridScreen("Purchased Courses", purchasedCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
                     BottomTab.STUDY_MATERIAL -> LocalStudyMaterialScreen() 
                 }
             }
@@ -325,71 +316,24 @@ fun LocalStudyMaterialScreen() {
                         super.doUpdateVisitedHistory(view, url, isReload)
                         canGoBack = view?.canGoBack() == true
                     }
-
-                    override fun onReceivedError(
-                        view: WebView?,
-                        request: android.webkit.WebResourceRequest?,
-                        error: android.webkit.WebResourceError?
-                    ) {
-                        super.onReceivedError(view, request, error)
-                        // If it fails to load AND there is no cache, show the offline error screen
-                        if (request?.isForMainFrame == true) {
-                            showCustomErrorPage(view)
-                        }
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onReceivedError(
-                        view: WebView?,
-                        errorCode: Int,
-                        description: String?,
-                        failingUrl: String?
-                    ) {
-                        super.onReceivedError(view, errorCode, description, failingUrl)
-                        showCustomErrorPage(view)
-                    }
-                    
-                    private fun showCustomErrorPage(view: WebView?) {
-                        val errorHtml = """
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                                <style>
-                                    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; text-align: center; background-color: #F8FAFC; color: #1E293B; }
-                                    .icon { font-size: 64px; margin-bottom: 20px; }
-                                </style>
-                            </head>
-                            <body>
-                                <div class="icon">📡</div>
-                                <h2>No Internet Connection</h2>
-                                <p>Please connect to the internet to download the study materials for the first time.</p>
-                            </body>
-                            </html>
-                        """.trimIndent()
-                        view?.loadDataWithBaseURL(null, errorHtml, "text/html", "UTF-8", null)
-                    }
                 }
                 
                 settings.apply {
                     javaScriptEnabled = true
-                    // 1. Enable Local Storage Databases
                     domStorageEnabled = true
-                    databaseEnabled = true
-                    
-                    // 2. THE OFFLINE MAGIC: Check cache first, if it fails, try network
-                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                    allowFileAccess = true 
+                    cacheMode = WebSettings.LOAD_NO_CACHE
                 }
-                
                 loadUrl("https://jcv-mock-tests.web.app/studymaterial/")
+                
                 webViewRef = this
             }
         }
     )
 }
+
 @Composable
-fun LoadingLogo() {
-    val themePrimaryColor = MaterialTheme.colorScheme.primary
+fun LoadingLogo(themePrimaryColor: Color) {
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(modifier = Modifier.size(80.dp).clip(CircleShape).background(themePrimaryColor.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) { Text("🎓", fontSize = 40.sp) }
     }
@@ -456,7 +400,7 @@ fun DashboardHomeContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = selectedCategory ?: "", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
             }
-            if (isLoading && allCourses.isEmpty()) LoadingLogo() 
+            if (isLoading && allCourses.isEmpty()) LoadingLogo(themePrimaryColor) 
             else if (displayedCourses.isEmpty()) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No courses found in this category.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             else {
                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
@@ -469,7 +413,6 @@ fun DashboardHomeContent(
 
 @Composable
 fun UserProfileHeader(auth: FirebaseAuth) {
-    val themePrimaryColor = MaterialTheme.colorScheme.primary
     val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
     val mobileNumber = auth.currentUser?.phoneNumber ?: "Mobile Number Not Set"
     Card(
@@ -559,16 +502,4 @@ fun CourseTag(text: String) {
     Box(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
         Text(text = text, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
     }
-}
-val DashboardHeaderShape = GenericShape { size, _ ->
-    moveTo(0f, 0f)
-    lineTo(size.width, 0f)
-    lineTo(size.width, size.height - 120f) // Right side is cut shorter
-    
-    // Smoothly curve downwards to the bottom-left corner
-    quadraticBezierTo(
-        size.width * 0.5f, size.height, // Control point pulls the curve DOWN
-        0f, size.height                   // Left side extends fully down
-    )
-    close()
 }
