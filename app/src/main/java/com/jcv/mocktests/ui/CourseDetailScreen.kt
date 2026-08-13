@@ -55,17 +55,12 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
-data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
-
-// ==========================================
-// NEW: THE JAVASCRIPT BRIDGE INTERFACE
-// ==========================================
-class TTSWebAppInterface(private val tts: TextToSpeech?) {
+// 1. CREATE THE BRIDGE INTERFACE FOR TTS
+class WebAppInterface(private val tts: TextToSpeech?) {
     @JavascriptInterface
     fun speak(text: String, rate: Float) {
         tts?.setSpeechRate(rate)
-        // QUEUE_FLUSH immediately stops current speech and reads the new text
+        // Flushes the queue so it instantly reads the new text
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
     }
 
@@ -74,6 +69,9 @@ class TTSWebAppInterface(private val tts: TextToSpeech?) {
         tts?.stop()
     }
 }
+
+data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
+data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +87,21 @@ fun CourseDetailScreen(
     val localStorage = remember { LocalStorage(context) }
     val examPrefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) } 
     val auth = remember { FirebaseAuth.getInstance() }
+    
+    // 2. INITIALIZE NATIVE ANDROID TTS
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    DisposableEffect(context) {
+        val textToSpeech = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                // TTS is successfully initialized
+            }
+        }
+        tts = textToSpeech
+        onDispose {
+            textToSpeech.stop()
+            textToSpeech.shutdown()
+        }
+    }
     
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT", "SAVED") 
@@ -250,48 +263,38 @@ fun CourseDetailScreen(
         }
     }
 
-    // ==========================================
-    // WEBVIEW WITH NATIVE ANDROID TTS BRIDGE
-    // ==========================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
 
-        // Setup Native Android TTS
-        var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-        DisposableEffect(context) {
-            tts = TextToSpeech(context) { status ->
-                if (status == TextToSpeech.SUCCESS) {
-                    // Force Telugu language if available, else English
-                    val teLocale = Locale("te", "IN")
-                    if (tts?.isLanguageAvailable(teLocale) == TextToSpeech.LANG_AVAILABLE || 
-                        tts?.isLanguageAvailable(teLocale) == TextToSpeech.LANG_COUNTRY_AVAILABLE) {
-                        tts?.language = teLocale
-                    } else {
-                        tts?.language = Locale("en", "IN")
-                    }
-                }
-            }
-            onDispose {
-                tts?.stop()
-                tts?.shutdown()
-            }
+        // Mute Native TTS when closing/backing out of the webview
+        fun stopSpeech() {
+            tts?.stop()
         }
 
-        fun closeWebView() {
-            tts?.stop() // Stop reading when closing
+        BackHandler {
+            stopSpeech()
             if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
         }
 
-        BackHandler { closeWebView() }
+        DisposableEffect(Unit) {
+            onDispose { stopSpeech() }
+        }
 
         Scaffold(
             topBar = {
-                Box(modifier = Modifier.fillMaxWidth().background(primaryGradient)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(primaryGradient)
+                ) {
                     TopAppBar(
                         title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         navigationIcon = { 
-                            IconButton(onClick = { closeWebView() }) { 
+                            IconButton(onClick = { 
+                                stopSpeech()
+                                if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
+                            }) { 
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
                             }
                         },
@@ -312,7 +315,7 @@ fun CourseDetailScreen(
                                 canGoBack = view?.canGoBack() == true
                             }
                         }
-                        webChromeClient = WebChromeClient()
+                        webChromeClient = WebChromeClient() 
 
                         settings.apply {
                             javaScriptEnabled = true
@@ -322,8 +325,8 @@ fun CourseDetailScreen(
                             cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
                         }
                         
-                        // INJECT THE ANDROID TTS BRIDGE
-                        addJavascriptInterface(TTSWebAppInterface(tts), "AndroidTTS")
+                        // 3. ATTACH THE BRIDGE TO THE WEBVIEW
+                        addJavascriptInterface(WebAppInterface(tts), "AndroidTTS")
                         
                         loadUrl(studyMaterialUrl)
                         webViewRef = this
