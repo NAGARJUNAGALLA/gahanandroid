@@ -6,7 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.speech.tts.TextToSpeech
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -55,6 +57,23 @@ import java.util.Locale
 
 data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
 data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
+
+// ==========================================
+// NEW: THE JAVASCRIPT BRIDGE INTERFACE
+// ==========================================
+class TTSWebAppInterface(private val tts: TextToSpeech?) {
+    @JavascriptInterface
+    fun speak(text: String, rate: Float) {
+        tts?.setSpeechRate(rate)
+        // QUEUE_FLUSH immediately stops current speech and reads the new text
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
+    }
+
+    @JavascriptInterface
+    fun stop() {
+        tts?.stop()
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -232,40 +251,47 @@ fun CourseDetailScreen(
     }
 
     // ==========================================
-    // WEBVIEW WITH FULL HTML TTS SUPPORT
+    // WEBVIEW WITH NATIVE ANDROID TTS BRIDGE
     // ==========================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
 
-        // Mute HTML SpeechSynthesis when closing/backing out of the webview
-        fun stopHtmlSpeech() {
-            webViewRef?.evaluateJavascript("window.speechSynthesis.cancel();", null)
+        // Setup Native Android TTS
+        var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+        DisposableEffect(context) {
+            tts = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    // Force Telugu language if available, else English
+                    val teLocale = Locale("te", "IN")
+                    if (tts?.isLanguageAvailable(teLocale) == TextToSpeech.LANG_AVAILABLE || 
+                        tts?.isLanguageAvailable(teLocale) == TextToSpeech.LANG_COUNTRY_AVAILABLE) {
+                        tts?.language = teLocale
+                    } else {
+                        tts?.language = Locale("en", "IN")
+                    }
+                }
+            }
+            onDispose {
+                tts?.stop()
+                tts?.shutdown()
+            }
         }
 
-        BackHandler {
-            stopHtmlSpeech()
+        fun closeWebView() {
+            tts?.stop() // Stop reading when closing
             if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
         }
 
-        DisposableEffect(Unit) {
-            onDispose { stopHtmlSpeech() }
-        }
+        BackHandler { closeWebView() }
 
         Scaffold(
             topBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(primaryGradient)
-                ) {
+                Box(modifier = Modifier.fillMaxWidth().background(primaryGradient)) {
                     TopAppBar(
                         title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         navigationIcon = { 
-                            IconButton(onClick = { 
-                                stopHtmlSpeech()
-                                if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
-                            }) { 
+                            IconButton(onClick = { closeWebView() }) { 
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
                             }
                         },
@@ -286,16 +312,19 @@ fun CourseDetailScreen(
                                 canGoBack = view?.canGoBack() == true
                             }
                         }
-                        webChromeClient = WebChromeClient() // Ensures proper JS alert/media handling
+                        webChromeClient = WebChromeClient()
 
                         settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
                             databaseEnabled = true
-                            // Allow the HTML's custom JS buttons to trigger audio without needing a strict native Android gesture
                             mediaPlaybackRequiresUserGesture = false 
                             cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
                         }
+                        
+                        // INJECT THE ANDROID TTS BRIDGE
+                        addJavascriptInterface(TTSWebAppInterface(tts), "AndroidTTS")
+                        
                         loadUrl(studyMaterialUrl)
                         webViewRef = this
                     }
