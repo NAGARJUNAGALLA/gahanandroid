@@ -52,19 +52,23 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.jcv.mocktests.utils.LocalStorage
+import org.json.JSONArray
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// 1. SIMPLE BRIDGE TO RECEIVE TEXT FROM WEBVIEW
-class WebAppInterface(private val onTextExtracted: (String) -> Unit) {
+// 1. BRIDGE TO RECEIVE CHUNKS FROM WEBVIEW
+class WebAppInterface(private val onChunksReceived: (String) -> Unit) {
     @JavascriptInterface
-    fun receiveText(text: String) {
-        onTextExtracted(text)
+    fun receiveChunks(jsonChunks: String) {
+        onChunksReceived(jsonChunks)
     }
 }
+
+// State Enum for our Media Player
+enum class TtsState { STOPPED, PLAYING, PAUSED }
 
 data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
 data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
@@ -245,34 +249,63 @@ fun CourseDetailScreen(
     }
 
     // ==========================================
-    // WEBVIEW WITH IN-APP NATIVE TTS
+    // WEBVIEW WITH FULL MEDIA CONTROLS
     // ==========================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
 
-        // TTS State
-        var isReadingAloud by remember { mutableStateOf(false) }
+        // Media Player States
+        var ttsState by remember { mutableStateOf(TtsState.STOPPED) }
+        var ttsChunks by remember { mutableStateOf<List<String>>(emptyList()) }
+        var currentChunkIndex by remember { mutableIntStateOf(0) }
+        
         var tts by remember { mutableStateOf<TextToSpeech?>(null) }
         val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+        // Playback Logic
+        fun playCurrentChunk() {
+            if (ttsChunks.isNotEmpty() && currentChunkIndex in ttsChunks.indices) {
+                val rawText = ttsChunks[currentChunkIndex]
+                
+                // FILTER OUT EMOJIS & SYMBOLS BEFORE READING
+                val cleanText = rawText
+                    .replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "") // Strips standard Emojis
+                    .replace(Regex("[📄📁🔖📑⭐🎓🔥✓❌]"), "") // Specific requested symbols
+                
+                ttsState = TtsState.PLAYING
+                tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "TTS_CHUNK_$currentChunkIndex")
+                
+                // Tell HTML to visually highlight the chunk being read
+                webViewRef?.evaluateJavascript("if(window.highlightChunk) window.highlightChunk($currentChunkIndex);", null)
+            }
+        }
 
         DisposableEffect(context) {
             val textToSpeech = TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
-                    tts?.language = Locale("te", "IN") // Attempt Telugu first
+                    tts?.language = Locale("te", "IN") 
                 }
             }
             
             textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
                 override fun onDone(utteranceId: String?) {
-                    mainHandler.post { isReadingAloud = false }
+                    // Move to Next Chunk automatically
+                    mainHandler.post { 
+                        if (ttsState == TtsState.PLAYING) {
+                            if (currentChunkIndex < ttsChunks.size - 1) {
+                                currentChunkIndex++
+                                playCurrentChunk()
+                            } else {
+                                ttsState = TtsState.STOPPED
+                                webViewRef?.evaluateJavascript("if(window.clearHighlight) window.clearHighlight();", null)
+                            }
+                        }
+                    }
                 }
                 override fun onError(utteranceId: String?) {
-                    mainHandler.post { 
-                        isReadingAloud = false 
-                        Toast.makeText(context, "Error reading text", Toast.LENGTH_SHORT).show()
-                    }
+                    mainHandler.post { ttsState = TtsState.STOPPED }
                 }
             })
             tts = textToSpeech
@@ -283,13 +316,14 @@ fun CourseDetailScreen(
             }
         }
 
-        fun stopSpeech() {
+        fun stopAllSpeech() {
             tts?.stop()
-            isReadingAloud = false
+            ttsState = TtsState.STOPPED
+            webViewRef?.evaluateJavascript("if(window.clearHighlight) window.clearHighlight();", null)
         }
 
         BackHandler {
-            stopSpeech()
+            stopAllSpeech()
             if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
         }
 
@@ -301,46 +335,102 @@ fun CourseDetailScreen(
                         .background(primaryGradient)
                 ) {
                     TopAppBar(
-                        title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        title = { 
+                            if (ttsState == TtsState.STOPPED) {
+                                Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) 
+                            } else {
+                                // Show progress text when reading
+                                Text("Reading ${currentChunkIndex + 1} of ${ttsChunks.size}", color = Color.White, fontSize = 14.sp)
+                            }
+                        },
                         navigationIcon = { 
-                            IconButton(onClick = { 
-                                stopSpeech()
-                                if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
-                            }) { 
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
+                            if (ttsState == TtsState.STOPPED) {
+                                IconButton(onClick = { 
+                                    if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
+                                }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
+                            } else {
+                                // Stop reading button replaces back button during playback
+                                IconButton(onClick = { stopAllSpeech() }) { 
+                                    Icon(Icons.Default.Close, contentDescription = "Stop", tint = Color.White) 
+                                }
                             }
                         },
                         actions = {
-                            // APP-NATIVE READ ALOUD BUTTON
-                            IconButton(onClick = {
-                                if (isReadingAloud) {
-                                    stopSpeech()
-                                } else {
-                                    isReadingAloud = true
+                            if (ttsState == TtsState.STOPPED) {
+                                // Standard Volume Icon to start
+                                IconButton(onClick = {
                                     Toast.makeText(context, "Extracting text...", Toast.LENGTH_SHORT).show()
-                                    
-                                    // Inject script to scrape the text and send it to the App
                                     val js = """
                                         var chunks = document.querySelectorAll('.tts-chunk');
-                                        var textToRead = '';
+                                        var textArray = [];
                                         if (chunks.length > 0) {
-                                            chunks.forEach(function(c) { 
-                                                textToRead += (c.getAttribute('data-speak') || c.innerText) + '... '; 
+                                            chunks.forEach(function(c, i) { 
+                                                textArray.push(c.getAttribute('data-speak') || c.innerText); 
                                             });
                                         } else {
-                                            textToRead = document.body.innerText;
+                                            textArray.push(document.body.innerText);
                                         }
-                                        window.AndroidTTS.receiveText(textToRead);
+                                        
+                                        // Inject highlighters
+                                        window.highlightChunk = function(index) {
+                                            var c = document.querySelectorAll('.tts-chunk');
+                                            c.forEach(el => el.classList.remove('tts-highlight'));
+                                            if(c[index]) {
+                                                c[index].classList.add('tts-highlight');
+                                                var y = c[index].getBoundingClientRect().top + window.pageYOffset - 120;
+                                                window.scrollTo({top: y, behavior: 'smooth'});
+                                            }
+                                        };
+                                        window.clearHighlight = function() {
+                                            var c = document.querySelectorAll('.tts-chunk');
+                                            c.forEach(el => el.classList.remove('tts-highlight'));
+                                        };
+
+                                        window.AndroidTTS.receiveChunks(JSON.stringify(textArray));
                                     """.trimIndent()
-                                    
                                     webViewRef?.evaluateJavascript(js, null)
+                                }) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = "Read Aloud", tint = Color.White)
                                 }
-                            }) {
-                                Icon(
-                                    imageVector = if (isReadingAloud) Icons.Default.Stop else Icons.Default.VolumeUp, 
-                                    contentDescription = "Read Aloud", 
-                                    tint = Color.White
-                                )
+                            } else {
+                                // MEDIA CONTROLS
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // PREV BUTTON
+                                    IconButton(
+                                        onClick = { 
+                                            if (currentChunkIndex > 0) {
+                                                tts?.stop()
+                                                currentChunkIndex--
+                                                playCurrentChunk()
+                                            }
+                                        },
+                                        enabled = currentChunkIndex > 0
+                                    ) { Icon(Icons.Default.SkipPrevious, "Previous", tint = if (currentChunkIndex > 0) Color.White else Color.White.copy(alpha=0.3f)) }
+
+                                    // PLAY/PAUSE BUTTON
+                                    IconButton(onClick = { 
+                                        if (ttsState == TtsState.PLAYING) {
+                                            tts?.stop()
+                                            ttsState = TtsState.PAUSED
+                                        } else {
+                                            playCurrentChunk()
+                                        }
+                                    }) { 
+                                        Icon(if (ttsState == TtsState.PLAYING) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", tint = Color.White) 
+                                    }
+
+                                    // NEXT BUTTON
+                                    IconButton(
+                                        onClick = { 
+                                            if (currentChunkIndex < ttsChunks.size - 1) {
+                                                tts?.stop()
+                                                currentChunkIndex++
+                                                playCurrentChunk()
+                                            }
+                                        },
+                                        enabled = currentChunkIndex < ttsChunks.size - 1
+                                    ) { Icon(Icons.Default.SkipNext, "Next", tint = if (currentChunkIndex < ttsChunks.size - 1) Color.White else Color.White.copy(alpha=0.3f)) }
+                                }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -369,14 +459,25 @@ fun CourseDetailScreen(
                             cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
                         }
                         
-                        // Attach the exact listener our JS script is looking for
-                        addJavascriptInterface(WebAppInterface { extractedText ->
-                            if (extractedText.isNotBlank()) {
-                                tts?.speak(extractedText, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
-                            } else {
-                                mainHandler.post { 
-                                    isReadingAloud = false 
-                                    Toast.makeText(context, "No readable text found.", Toast.LENGTH_SHORT).show()
+                        // Handle receiving chunks from WebView
+                        addJavascriptInterface(WebAppInterface { jsonChunks ->
+                            mainHandler.post {
+                                try {
+                                    val jsonArray = JSONArray(jsonChunks)
+                                    val extractedChunks = mutableListOf<String>()
+                                    for (i in 0 until jsonArray.length()) {
+                                        extractedChunks.add(jsonArray.getString(i))
+                                    }
+                                    
+                                    if (extractedChunks.isNotEmpty()) {
+                                        ttsChunks = extractedChunks
+                                        currentChunkIndex = 0
+                                        playCurrentChunk()
+                                    } else {
+                                        Toast.makeText(context, "No text found.", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error extracting text.", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }, "AndroidTTS")
