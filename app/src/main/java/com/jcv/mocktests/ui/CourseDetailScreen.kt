@@ -58,53 +58,11 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// ==========================================
-// 1. BULLETPROOF NATIVE TTS MANAGER
-// ==========================================
-class TTSManager(context: Context, private val onUtteranceDone: () -> Unit) {
-    private var tts: TextToSpeech? = null
-    private var isReady = false
-
-    init {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                isReady = true
-                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) {
-                        onUtteranceDone()
-                    }
-                    override fun onError(utteranceId: String?) {}
-                })
-            }
-        }
-    }
-
-    fun speak(text: String, rate: Float) {
-        if (isReady) {
-            tts?.setSpeechRate(rate)
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
-        } else {
-            // If user clicks immediately before TTS is ready, delay and retry
-            Handler(Looper.getMainLooper()).postDelayed({ speak(text, rate) }, 500)
-        }
-    }
-
-    fun stop() { tts?.stop() }
-    fun shutdown() { tts?.stop(); tts?.shutdown() }
-}
-
-class WebAppInterface(private val ttsManager: TTSManager) {
+// 1. SIMPLE BRIDGE TO RECEIVE TEXT FROM WEBVIEW
+class WebAppInterface(private val onTextExtracted: (String) -> Unit) {
     @JavascriptInterface
-    fun speak(text: String, rateStr: String) {
-        // Accepts String to prevent Javascript Number vs Kotlin Float crashes
-        val rate = rateStr.toFloatOrNull() ?: 1.0f
-        ttsManager.speak(text, rate)
-    }
-
-    @JavascriptInterface
-    fun stop() {
-        ttsManager.stop()
+    fun receiveText(text: String) {
+        onTextExtracted(text)
     }
 }
 
@@ -287,37 +245,52 @@ fun CourseDetailScreen(
     }
 
     // ==========================================
-    // WEBVIEW WITH FULL HTML TTS SUPPORT
+    // WEBVIEW WITH IN-APP NATIVE TTS
     // ==========================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
 
-        // Initialize TTS Manager securely
+        // TTS State
+        var isReadingAloud by remember { mutableStateOf(false) }
+        var tts by remember { mutableStateOf<TextToSpeech?>(null) }
         val mainHandler = remember { Handler(Looper.getMainLooper()) }
-        val ttsManager = remember(context) {
-            TTSManager(context) {
-                // When native TTS finishes reading a sentence, it alerts the HTML
-                mainHandler.post {
-                    webViewRef?.evaluateJavascript("if(window.onAndroidTtsDone) window.onAndroidTtsDone();", null)
+
+        DisposableEffect(context) {
+            val textToSpeech = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    tts?.language = Locale("te", "IN") // Attempt Telugu first
                 }
+            }
+            
+            textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+                override fun onDone(utteranceId: String?) {
+                    mainHandler.post { isReadingAloud = false }
+                }
+                override fun onError(utteranceId: String?) {
+                    mainHandler.post { 
+                        isReadingAloud = false 
+                        Toast.makeText(context, "Error reading text", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            })
+            tts = textToSpeech
+
+            onDispose {
+                textToSpeech.stop()
+                textToSpeech.shutdown()
             }
         }
 
-        fun stopAllSpeech() {
-            ttsManager.stop()
-            webViewRef?.evaluateJavascript("if(window.stopTTS) window.stopTTS();", null)
+        fun stopSpeech() {
+            tts?.stop()
+            isReadingAloud = false
         }
 
         BackHandler {
-            stopAllSpeech()
+            stopSpeech()
             if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
-        }
-
-        DisposableEffect(Unit) {
-            onDispose { 
-                ttsManager.shutdown() 
-            }
         }
 
         Scaffold(
@@ -331,10 +304,43 @@ fun CourseDetailScreen(
                         title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         navigationIcon = { 
                             IconButton(onClick = { 
-                                stopAllSpeech()
+                                stopSpeech()
                                 if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
                             }) { 
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
+                            }
+                        },
+                        actions = {
+                            // APP-NATIVE READ ALOUD BUTTON
+                            IconButton(onClick = {
+                                if (isReadingAloud) {
+                                    stopSpeech()
+                                } else {
+                                    isReadingAloud = true
+                                    Toast.makeText(context, "Extracting text...", Toast.LENGTH_SHORT).show()
+                                    
+                                    // Inject script to scrape the text and send it to the App
+                                    val js = """
+                                        var chunks = document.querySelectorAll('.tts-chunk');
+                                        var textToRead = '';
+                                        if (chunks.length > 0) {
+                                            chunks.forEach(function(c) { 
+                                                textToRead += (c.getAttribute('data-speak') || c.innerText) + '... '; 
+                                            });
+                                        } else {
+                                            textToRead = document.body.innerText;
+                                        }
+                                        window.AndroidTTS.receiveText(textToRead);
+                                    """.trimIndent()
+                                    
+                                    webViewRef?.evaluateJavascript(js, null)
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = if (isReadingAloud) Icons.Default.Stop else Icons.Default.VolumeUp, 
+                                    contentDescription = "Read Aloud", 
+                                    tint = Color.White
+                                )
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -360,12 +366,20 @@ fun CourseDetailScreen(
                             javaScriptEnabled = true
                             domStorageEnabled = true
                             databaseEnabled = true
-                            mediaPlaybackRequiresUserGesture = false 
                             cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
                         }
                         
-                        // Link the TTS Manager to the HTML window
-                        addJavascriptInterface(WebAppInterface(ttsManager), "AndroidTTS")
+                        // Attach the exact listener our JS script is looking for
+                        addJavascriptInterface(WebAppInterface { extractedText ->
+                            if (extractedText.isNotBlank()) {
+                                tts?.speak(extractedText, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
+                            } else {
+                                mainHandler.post { 
+                                    isReadingAloud = false 
+                                    Toast.makeText(context, "No readable text found.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }, "AndroidTTS")
                         
                         loadUrl(studyMaterialUrl)
                         webViewRef = this
@@ -376,6 +390,7 @@ fun CourseDetailScreen(
         return
     }
 
+    // MAIN COURSE DETAILS SCAFFOLD
     Scaffold(
         topBar = {
             Box(
