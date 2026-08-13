@@ -1,10 +1,11 @@
 package com.jcv.mocktests.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -74,7 +75,7 @@ fun CourseDetailScreen(
     
     var tests by remember { mutableStateOf<List<TestSummary>>(emptyList()) }
     var bookmarkedQuestions by remember { mutableStateOf<List<BookmarkedQuestion>>(emptyList()) }
-    var courseSubjects by remember { mutableStateOf<List<String>>(emptyList()) } // NEW: Stores dynamic subject names
+    var courseSubjects by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     var upiId by remember { mutableStateOf("") }
@@ -153,13 +154,12 @@ fun CourseDetailScreen(
                     val testsMap = doc.data?.get("tests") as? Map<String, Any>
                     val parsedTests = mutableListOf<TestSummary>()
                     val parsedBookmarks = mutableListOf<BookmarkedQuestion>()
-                    val subjectsSet = mutableSetOf<String>() // NEW: Collects unique subject names
+                    val subjectsSet = mutableSetOf<String>() 
                     
                     testsMap?.forEach { (testName, testData) ->
                         var qCount = 0
                         val specificTest = testData as? Map<String, List<Map<String, Any>>>
                         
-                        // Dynamically extract the section/subject names from Firebase
                         specificTest?.keys?.forEach { subjectName ->
                             subjectsSet.add(subjectName)
                         }
@@ -192,18 +192,37 @@ fun CourseDetailScreen(
                     }
                     tests = parsedTests
                     bookmarkedQuestions = parsedBookmarks 
-                    courseSubjects = subjectsSet.toList() // Save the dynamic subjects to state
+                    courseSubjects = subjectsSet.toList()
                 }
                 isLoading = false
             }.addOnFailureListener { isLoading = false }
     }
 
     if (showPaymentDialog) {
-        PaymentDialog(courseTitle, courseFee, courseDuration, paymentStatus == "rejected", isSubmittingPayment, upiId, merchantName, staticQrUrl, onDismiss = { showPaymentDialog = false }) { app, utr ->
+        PaymentDialog(
+            courseTitle = courseTitle, 
+            courseFee = courseFee, 
+            courseDuration = courseDuration, 
+            isRejected = paymentStatus == "rejected", 
+            isSubmitting = isSubmittingPayment, 
+            upiId = upiId, 
+            merchantName = merchantName, 
+            staticQrUrl = staticQrUrl, 
+            onDismiss = { showPaymentDialog = false }
+        ) { app, utr, totalPaid ->
             isSubmittingPayment = true
             val paymentData = hashMapOf(
-                "uid" to auth.currentUser?.uid, "email" to auth.currentUser?.email, "sheetId" to courseId, "courseTitle" to courseTitle,
-                "fee" to courseFee, "durationMonths" to courseDuration, "utr" to utr, "app" to app, "status" to "pending", "createdAt" to FieldValue.serverTimestamp()
+                "uid" to auth.currentUser?.uid, 
+                "email" to auth.currentUser?.email, 
+                "sheetId" to courseId, 
+                "courseTitle" to courseTitle,
+                "fee" to courseFee, 
+                "totalPaid" to totalPaid, // Saves exact total including internet fees to Firebase
+                "durationMonths" to courseDuration, 
+                "utr" to utr, 
+                "app" to app, 
+                "status" to "pending", 
+                "createdAt" to FieldValue.serverTimestamp()
             )
             FirebaseFirestore.getInstance().collection("pending_registrations").document("${auth.currentUser?.uid}_${courseTitle}").set(paymentData)
                 .addOnSuccessListener { isSubmittingPayment = false; showPaymentDialog = false; Toast.makeText(context, "Registration submitted successfully!", Toast.LENGTH_LONG).show() }
@@ -211,7 +230,6 @@ fun CourseDetailScreen(
         }
     }
 
-    // WEBVIEW SCAFFOLD
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
@@ -265,7 +283,6 @@ fun CourseDetailScreen(
         return
     }
 
-    // MAIN COURSE DETAILS SCAFFOLD
     Scaffold(
         topBar = {
             Box(
@@ -302,7 +319,6 @@ fun CourseDetailScreen(
                     
                     val totalQs = tests.sumOf { it.questionCount }
                     
-                    // TOTALS CARD
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Card(modifier = Modifier.weight(1f).padding(end = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
                             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -320,9 +336,6 @@ fun CourseDetailScreen(
                     
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // ==========================================
-                    // ANALYTICS & SUBJECT BREAKDOWN ENGINE
-                    // ==========================================
                     var attemptedCount = 0
                     var totalAchievedScore = 0f
                     var totalPossibleScore = 0f
@@ -338,7 +351,6 @@ fun CourseDetailScreen(
                         }
                     }
 
-                    // Only show Analytics if they've attempted at least 1 test
                     if (attemptedCount > 0) {
                         val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
                         val accuracy = if (totalPossibleScore > 0) ((totalAchievedScore / totalPossibleScore) * 100).toInt() else 0
@@ -354,7 +366,6 @@ fun CourseDetailScreen(
                             shape = RoundedCornerShape(24.dp)
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
-                                // Progress Bar
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Text("Tests Completed", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                                     Text("$attemptedCount / ${tests.size}", fontWeight = FontWeight.Black, color = themePrimaryColor, fontSize = 14.sp)
@@ -371,7 +382,6 @@ fun CourseDetailScreen(
                                 Divider(color = MaterialTheme.colorScheme.surfaceVariant)
                                 Spacer(modifier = Modifier.height(20.dp))
                                 
-                                // Stats Row
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Overall Score", fontSize = 12.sp, color = Color.Gray)
@@ -388,7 +398,6 @@ fun CourseDetailScreen(
                             }
                         }
                         
-                        // SUBJECT ANALYSIS SECTION
                         if (courseSubjects.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(24.dp))
                             Text("Subject Analysis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
@@ -402,7 +411,6 @@ fun CourseDetailScreen(
                             ) {
                                 Column(modifier = Modifier.padding(20.dp)) {
                                     courseSubjects.forEachIndexed { index, subject ->
-                                        // Placeholder logic: Uses overall accuracy until LocalStorage provides subject scores
                                         val displayProgress = accuracy / 100f
                                         
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -425,8 +433,6 @@ fun CourseDetailScreen(
                         }
                         Spacer(modifier = Modifier.height(24.dp))
                     }
-                    // ==========================================
-
 
                     if (paymentStatus == "approved") {
                         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
@@ -454,7 +460,7 @@ fun CourseDetailScreen(
                         OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)) {
                             Text("View Course Content", fontWeight = FontWeight.Bold)
                         }
-                        Spacer(modifier = Modifier.height(24.dp)) // Extra padding at bottom for smooth scrolling
+                        Spacer(modifier = Modifier.height(24.dp)) 
                     }
                 }
             } else {
@@ -669,74 +675,163 @@ fun FolderCard(title: String, icon: ImageVector, themeColor: Color, onClick: () 
 @Composable
 fun PaymentDialog(
     courseTitle: String, courseFee: Double, courseDuration: Int, isRejected: Boolean, isSubmitting: Boolean,
-    upiId: String, merchantName: String, staticQrUrl: String, onDismiss: () -> Unit, onSubmit: (String, String) -> Unit
+    upiId: String, merchantName: String, staticQrUrl: String, onDismiss: () -> Unit, onSubmit: (String, String, Double) -> Unit
 ) {
     val themePrimaryColor = MaterialTheme.colorScheme.primary
+    val context = LocalContext.current
+    
+    // Multi-step Payment logic
+    var currentStep by remember { mutableIntStateOf(1) }
+    
+    // Cost Calculations (Internet fee calculated purely as 5% of Course Fee dynamically)
+    val internetFee = courseFee * 0.05
+    val totalFee = courseFee + internetFee
+    
     var selectedApp by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var utr by remember { mutableStateOf("") }
-    var hasClickedPay by remember(isRejected) { mutableStateOf(isRejected) }
     val apps = listOf("PhonePe", "Google Pay (GPay)", "Paytm", "Other")
-    val context = LocalContext.current
     
-    val qrUrl = remember(upiId, staticQrUrl, courseFee) {
-        if (upiId.isNotBlank()) "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${URLEncoder.encode("upi://pay?pa=$upiId&pn=${URLEncoder.encode(merchantName, "UTF-8")}&am=${courseFee}&cu=INR", "UTF-8")}" else staticQrUrl
+    val qrUrl = remember(upiId, staticQrUrl, totalFee) {
+        if (upiId.isNotBlank()) "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${URLEncoder.encode("upi://pay?pa=$upiId&pn=${URLEncoder.encode(merchantName, "UTF-8")}&am=${totalFee}&cu=INR", "UTF-8")}" else staticQrUrl
     }
 
     AlertDialog(
-        onDismissRequest = { if (!isSubmitting) onDismiss() }, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp),
+        onDismissRequest = { if (!isSubmitting) onDismiss() }, 
+        containerColor = MaterialTheme.colorScheme.surface, 
+        shape = RoundedCornerShape(24.dp),
         title = {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Unlock Course", fontWeight = FontWeight.Bold, color = themePrimaryColor, fontSize = 18.sp)
-                IconButton(onClick = onDismiss, enabled = !isSubmitting) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray) }
+                Text(if (currentStep == 1) "Payment Summary" else "Make Payment", fontWeight = FontWeight.Bold, color = themePrimaryColor, fontSize = 18.sp)
+                IconButton(onClick = { 
+                    if (!isSubmitting) {
+                        if (currentStep == 2) currentStep = 1 else onDismiss()
+                    }
+                }) { 
+                    Icon(if (currentStep == 2) Icons.Default.ArrowBack else Icons.Default.Close, contentDescription = "Close/Back", tint = Color.Gray) 
+                }
             }
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("₹${courseFee.toInt()}", fontSize = 36.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
-                if (isRejected) Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()) { Text(text = "Your previous payment was rejected.\nPlease try again.", color = Color(0xFFC62828), fontSize = 12.sp, modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold) }
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        if (upiId.isNotBlank()) {
-                            try { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse("upi://pay?pa=$upiId&pn=${URLEncoder.encode(merchantName, "UTF-8")}&am=${courseFee}&cu=INR")), "Pay securely with"))
-                                hasClickedPay = true } catch (e: Exception) { Toast.makeText(context, "No UPI app found.", Toast.LENGTH_LONG).show(); hasClickedPay = true }
-                        } else Toast.makeText(context, "UPI ID is not configured.", Toast.LENGTH_LONG).show()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(54.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), shape = RoundedCornerShape(50)
-                ) {
-                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White); Spacer(modifier = Modifier.width(8.dp)); Text("PAY NOW", fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(text = "OR scan the QR code below", fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 8.dp))
-                Box(modifier = Modifier.size(160.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)).border(1.dp, Color.LightGray, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                    if (qrUrl.isNotBlank()) AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(qrUrl).crossfade(true).build(), contentDescription = "UPI QR Code", modifier = Modifier.padding(8.dp).fillMaxSize()) else CircularProgressIndicator(color = themePrimaryColor, modifier = Modifier.size(24.dp))
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                    OutlinedTextField(
-                        value = selectedApp, onValueChange = {}, readOnly = true, label = { Text("Paid using app") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(), shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
-                    )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
-                        apps.forEach { app -> DropdownMenuItem(text = { Text(app) }, onClick = { selectedApp = app; expanded = false; hasClickedPay = true }) }
+                
+                if (isRejected && currentStep == 1) {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), modifier = Modifier.padding(bottom = 16.dp).fillMaxWidth()) { 
+                        Text(text = "Your previous payment was rejected. Please try again.", color = Color(0xFFC62828), fontSize = 12.sp, modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold) 
                     }
                 }
-                if (hasClickedPay || selectedApp.isNotBlank()) {
+
+                // =====================================
+                // STEP 1: PAYMENT SUMMARY SCREEN
+                // =====================================
+                if (currentStep == 1) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Course Fee", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(String.format(Locale.getDefault(), "₹%.2f", courseFee), fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Internet Handling Fee", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(String.format(Locale.getDefault(), "₹%.2f", internetFee), fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Divider(color = Color.LightGray)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Total Amount", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(String.format(Locale.getDefault(), "₹%.2f", totalFee), fontWeight = FontWeight.Black, fontSize = 20.sp, color = themePrimaryColor)
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { currentStep = 2 },
+                        modifier = Modifier.fillMaxWidth().height(54.dp), 
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), 
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("BUY NOW", fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
+                    }
+                }
+
+                // =====================================
+                // STEP 2: PAYMENT ACTION & VERIFICATION
+                // =====================================
+                if (currentStep == 2) {
+                    Text(text = "Scan QR to pay exactly", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                    Text(String.format(Locale.getDefault(), "₹%.2f", totalFee), fontSize = 32.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(modifier = Modifier.size(160.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)).border(1.dp, Color.LightGray, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                        if (qrUrl.isNotBlank()) AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(qrUrl).crossfade(true).build(), contentDescription = "UPI QR Code", modifier = Modifier.padding(8.dp).fillMaxSize()) 
+                        else CircularProgressIndicator(color = themePrimaryColor, modifier = Modifier.size(24.dp))
+                    }
+                    
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
-                        value = utr, onValueChange = { utr = it }, label = { Text("Transaction / UTR Number") }, placeholder = { Text("e.g. 123456789012") },
+                        value = upiId,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Or pay to this UPI ID", fontSize = 12.sp) },
+                        trailingIcon = { 
+                            IconButton(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("UPI ID", upiId))
+                                Toast.makeText(context, "UPI ID copied to clipboard!", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = themePrimaryColor)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color(0xFF90CAF9))) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Default.Info, contentDescription = "Info", tint = Color(0xFF1976D2), modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Instructions: Open any UPI app, make the payment, and copy the 12-digit UTR/Ref Number from the success screen to verify your purchase.", fontSize = 11.sp, color = Color(0xFF0D47A1), lineHeight = 16.sp)
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+                        OutlinedTextField(
+                            value = selectedApp, onValueChange = {}, readOnly = true, label = { Text("I paid using app") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(), shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
+                        )
+                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+                            apps.forEach { app -> DropdownMenuItem(text = { Text(app) }, onClick = { selectedApp = app; expanded = false }) }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = utr, onValueChange = { utr = it }, label = { Text("12-Digit UTR Number") }, placeholder = { Text("e.g. 123456789012") },
                         modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
                     )
                 }
             }
         },
         confirmButton = {
-            if (hasClickedPay || selectedApp.isNotBlank()) {
+            if (currentStep == 2) {
                 Button(
-                    onClick = { onSubmit(if (selectedApp.isNotBlank()) selectedApp else "Direct UPI", utr) }, 
+                    onClick = { onSubmit(if (selectedApp.isNotBlank()) selectedApp else "Direct UPI", utr, totalFee) }, 
                     modifier = Modifier.fillMaxWidth().height(48.dp), enabled = utr.isNotBlank() && !isSubmitting, colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor), shape = RoundedCornerShape(50)
-                ) { if (isSubmitting) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) else Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White) }
+                ) { 
+                    if (isSubmitting) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp) 
+                    else Text("Submit Details", fontWeight = FontWeight.Bold, color = Color.White) 
+                }
             }
         },
         dismissButton = null
