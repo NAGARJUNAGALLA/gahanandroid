@@ -217,7 +217,7 @@ fun CourseDetailScreen(
                 "sheetId" to courseId, 
                 "courseTitle" to courseTitle,
                 "fee" to courseFee, 
-                "totalPaid" to totalPaid, // Saves exact total including internet fees to Firebase
+                "totalPaid" to totalPaid,
                 "durationMonths" to courseDuration, 
                 "utr" to utr, 
                 "app" to app, 
@@ -300,7 +300,8 @@ fun CourseDetailScreen(
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
+        // REMOVED verticalScroll from here to prevent nested scrolling crashes
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -311,7 +312,8 @@ fun CourseDetailScreen(
             }
 
             if (selectedTab == 0) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                // ADDED verticalScroll exclusively to the Overview Tab
+                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Comprehensive mock tests and materials designed to help you prepare and excel.", color = Color.Gray)
@@ -468,7 +470,9 @@ fun CourseDetailScreen(
                     if (isLoading) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = themePrimaryColor) }
                     } else if (paymentStatus != "approved") {
-                        Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        // ADDED verticalScroll to locked view to prevent cutting off on small screens
+                        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Spacer(modifier = Modifier.height(40.dp))
                             Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size(64.dp), tint = Color.LightGray)
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(text = if (paymentStatus == "expired") "Subscription Expired" else "Course Locked", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
@@ -500,7 +504,8 @@ fun CourseDetailScreen(
                                     Text("No content found for this course yet.", color = Color.Gray) 
                                 }
                             } else if (currentContentFolder == null) {
-                                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                                // ADDED verticalScroll to Folder View
+                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                                     if (subscriptionExpiry != null) {
                                         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
                                             Text(text = "Active Subscription: Valid until ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(subscriptionExpiry!!)}", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp).fillMaxWidth(), fontSize = 13.sp)
@@ -543,7 +548,8 @@ fun CourseDetailScreen(
                                         Text("Mock Tests", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onBackground)
                                     }
 
-                                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    // LazyColumn handles its own scrolling!
+                                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         items(tests) { test ->
                                             val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
                                             val testScore = localStorage.getTestScore(courseId, test.name)
@@ -592,7 +598,9 @@ fun CourseDetailScreen(
                             }
                         } else if (selectedTab == 2) {
                             if (bookmarkedQuestions.isEmpty()) {
-                                Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                // ADDED verticalScroll just in case of small screens
+                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                    Spacer(modifier = Modifier.height(40.dp))
                                     Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text("No Saved Doubts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Gray)
@@ -600,6 +608,7 @@ fun CourseDetailScreen(
                                     Text(text = "When taking a mock test, tap the ⭐ icon next to difficult questions to save them here for quick revision!", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 14.sp)
                                 }
                             } else {
+                                // LazyColumn handles its own scrolling!
                                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     item { Text(text = "Review your saved questions. The correct answers are highlighted in green.", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)) }
                                     items(bookmarkedQuestions) { bq ->
@@ -680,10 +689,7 @@ fun PaymentDialog(
     val themePrimaryColor = MaterialTheme.colorScheme.primary
     val context = LocalContext.current
     
-    // Multi-step Payment logic
     var currentStep by remember { mutableIntStateOf(1) }
-    
-    // Cost Calculations (Internet fee calculated purely as 5% of Course Fee dynamically)
     val internetFee = courseFee * 0.05
     val totalFee = courseFee + internetFee
     
@@ -721,9 +727,6 @@ fun PaymentDialog(
                     }
                 }
 
-                // =====================================
-                // STEP 1: PAYMENT SUMMARY SCREEN
-                // =====================================
                 if (currentStep == 1) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -762,9 +765,6 @@ fun PaymentDialog(
                     }
                 }
 
-                // =====================================
-                // STEP 2: PAYMENT ACTION & VERIFICATION
-                // =====================================
                 if (currentStep == 2) {
                     Text(text = "Scan QR to pay exactly", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center)
                     Text(String.format(Locale.getDefault(), "₹%.2f", totalFee), fontSize = 32.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
