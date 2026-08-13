@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.view.ViewGroup
+import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -230,12 +231,25 @@ fun CourseDetailScreen(
         }
     }
 
+    // ==========================================
+    // WEBVIEW WITH FULL HTML TTS SUPPORT
+    // ==========================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
 
+        // Mute HTML SpeechSynthesis when closing/backing out of the webview
+        fun stopHtmlSpeech() {
+            webViewRef?.evaluateJavascript("window.speechSynthesis.cancel();", null)
+        }
+
         BackHandler {
+            stopHtmlSpeech()
             if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
+        }
+
+        DisposableEffect(Unit) {
+            onDispose { stopHtmlSpeech() }
         }
 
         Scaffold(
@@ -248,7 +262,10 @@ fun CourseDetailScreen(
                     TopAppBar(
                         title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         navigationIcon = { 
-                            IconButton(onClick = { if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false }) { 
+                            IconButton(onClick = { 
+                                stopHtmlSpeech()
+                                if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
+                            }) { 
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
                             }
                         },
@@ -262,16 +279,21 @@ fun CourseDetailScreen(
                 factory = { ctx ->
                     WebView(ctx).apply {
                         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                        
                         webViewClient = object : WebViewClient() {
                             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                                 super.doUpdateVisitedHistory(view, url, isReload)
                                 canGoBack = view?.canGoBack() == true
                             }
                         }
+                        webChromeClient = WebChromeClient() // Ensures proper JS alert/media handling
+
                         settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
                             databaseEnabled = true
+                            // Allow the HTML's custom JS buttons to trigger audio without needing a strict native Android gesture
+                            mediaPlaybackRequiresUserGesture = false 
                             cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
                         }
                         loadUrl(studyMaterialUrl)
@@ -300,7 +322,6 @@ fun CourseDetailScreen(
             }
         }
     ) { padding ->
-        // REMOVED verticalScroll from here to prevent nested scrolling crashes
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
                 tabs.forEachIndexed { index, title ->
@@ -312,7 +333,6 @@ fun CourseDetailScreen(
             }
 
             if (selectedTab == 0) {
-                // ADDED verticalScroll exclusively to the Overview Tab
                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                     Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -470,7 +490,6 @@ fun CourseDetailScreen(
                     if (isLoading) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = themePrimaryColor) }
                     } else if (paymentStatus != "approved") {
-                        // ADDED verticalScroll to locked view to prevent cutting off on small screens
                         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                             Spacer(modifier = Modifier.height(40.dp))
                             Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size(64.dp), tint = Color.LightGray)
@@ -504,7 +523,6 @@ fun CourseDetailScreen(
                                     Text("No content found for this course yet.", color = Color.Gray) 
                                 }
                             } else if (currentContentFolder == null) {
-                                // ADDED verticalScroll to Folder View
                                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                                     if (subscriptionExpiry != null) {
                                         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
@@ -548,7 +566,6 @@ fun CourseDetailScreen(
                                         Text("Mock Tests", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onBackground)
                                     }
 
-                                    // LazyColumn handles its own scrolling!
                                     LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         items(tests) { test ->
                                             val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
@@ -598,7 +615,6 @@ fun CourseDetailScreen(
                             }
                         } else if (selectedTab == 2) {
                             if (bookmarkedQuestions.isEmpty()) {
-                                // ADDED verticalScroll just in case of small screens
                                 Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     Spacer(modifier = Modifier.height(40.dp))
                                     Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
@@ -608,7 +624,6 @@ fun CourseDetailScreen(
                                     Text(text = "When taking a mock test, tap the ⭐ icon next to difficult questions to save them here for quick revision!", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 14.sp)
                                 }
                             } else {
-                                // LazyColumn handles its own scrolling!
                                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     item { Text(text = "Review your saved questions. The correct answers are highlighted in green.", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)) }
                                     items(bookmarkedQuestions) { bq ->
