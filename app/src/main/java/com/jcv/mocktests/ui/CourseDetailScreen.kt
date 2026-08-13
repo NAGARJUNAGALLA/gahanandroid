@@ -6,7 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -55,18 +58,53 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// 1. CREATE THE BRIDGE INTERFACE FOR TTS
-class WebAppInterface(private val tts: TextToSpeech?) {
-    @JavascriptInterface
+// ==========================================
+// 1. BULLETPROOF NATIVE TTS MANAGER
+// ==========================================
+class TTSManager(context: Context, private val onUtteranceDone: () -> Unit) {
+    private var tts: TextToSpeech? = null
+    private var isReady = false
+
+    init {
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                isReady = true
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {
+                        onUtteranceDone()
+                    }
+                    override fun onError(utteranceId: String?) {}
+                })
+            }
+        }
+    }
+
     fun speak(text: String, rate: Float) {
-        tts?.setSpeechRate(rate)
-        // Flushes the queue so it instantly reads the new text
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
+        if (isReady) {
+            tts?.setSpeechRate(rate)
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID")
+        } else {
+            // If user clicks immediately before TTS is ready, delay and retry
+            Handler(Looper.getMainLooper()).postDelayed({ speak(text, rate) }, 500)
+        }
+    }
+
+    fun stop() { tts?.stop() }
+    fun shutdown() { tts?.stop(); tts?.shutdown() }
+}
+
+class WebAppInterface(private val ttsManager: TTSManager) {
+    @JavascriptInterface
+    fun speak(text: String, rateStr: String) {
+        // Accepts String to prevent Javascript Number vs Kotlin Float crashes
+        val rate = rateStr.toFloatOrNull() ?: 1.0f
+        ttsManager.speak(text, rate)
     }
 
     @JavascriptInterface
     fun stop() {
-        tts?.stop()
+        ttsManager.stop()
     }
 }
 
@@ -87,21 +125,6 @@ fun CourseDetailScreen(
     val localStorage = remember { LocalStorage(context) }
     val examPrefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) } 
     val auth = remember { FirebaseAuth.getInstance() }
-    
-    // 2. INITIALIZE NATIVE ANDROID TTS
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    DisposableEffect(context) {
-        val textToSpeech = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                // TTS is successfully initialized
-            }
-        }
-        tts = textToSpeech
-        onDispose {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
-        }
-    }
     
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT", "SAVED") 
@@ -263,22 +286,38 @@ fun CourseDetailScreen(
         }
     }
 
+    // ==========================================
+    // WEBVIEW WITH FULL HTML TTS SUPPORT
+    // ==========================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
 
-        // Mute Native TTS when closing/backing out of the webview
-        fun stopSpeech() {
-            tts?.stop()
+        // Initialize TTS Manager securely
+        val mainHandler = remember { Handler(Looper.getMainLooper()) }
+        val ttsManager = remember(context) {
+            TTSManager(context) {
+                // When native TTS finishes reading a sentence, it alerts the HTML
+                mainHandler.post {
+                    webViewRef?.evaluateJavascript("if(window.onAndroidTtsDone) window.onAndroidTtsDone();", null)
+                }
+            }
+        }
+
+        fun stopAllSpeech() {
+            ttsManager.stop()
+            webViewRef?.evaluateJavascript("if(window.stopTTS) window.stopTTS();", null)
         }
 
         BackHandler {
-            stopSpeech()
+            stopAllSpeech()
             if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
         }
 
         DisposableEffect(Unit) {
-            onDispose { stopSpeech() }
+            onDispose { 
+                ttsManager.shutdown() 
+            }
         }
 
         Scaffold(
@@ -292,7 +331,7 @@ fun CourseDetailScreen(
                         title = { Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         navigationIcon = { 
                             IconButton(onClick = { 
-                                stopSpeech()
+                                stopAllSpeech()
                                 if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
                             }) { 
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) 
@@ -325,8 +364,8 @@ fun CourseDetailScreen(
                             cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
                         }
                         
-                        // 3. ATTACH THE BRIDGE TO THE WEBVIEW
-                        addJavascriptInterface(WebAppInterface(tts), "AndroidTTS")
+                        // Link the TTS Manager to the HTML window
+                        addJavascriptInterface(WebAppInterface(ttsManager), "AndroidTTS")
                         
                         loadUrl(studyMaterialUrl)
                         webViewRef = this
