@@ -26,44 +26,38 @@ jobs:
       with:
         gradle-version: '8.6'
 
-    - name: Build Release APK
-      run: gradle assembleRelease
+    # 1. Convert the Base64 secret back into a real keystore file inside the runner
+    - name: Decode Keystore
+      run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/release-key.keystore
 
-    - name: Build Release AAB
-      run: gradle bundleRelease
+    # 2. Build and Sign the APK natively using Gradle
+    - name: Build and Sign Release APK
+      run: >
+        gradle assembleRelease
+        -Pandroid.injected.signing.store.file=release-key.keystore
+        -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }}
+        -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }}
+        -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-    # FIX: Use the exact path to sdkmanager and auto-accept licenses
-    - name: Install Android Build Tools 29.0.3
-      run: echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3"
+    # 3. Build and Sign the AAB natively using Gradle
+    - name: Build and Sign Release AAB
+      run: >
+        gradle bundleRelease
+        -Pandroid.injected.signing.store.file=release-key.keystore
+        -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }}
+        -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }}
+        -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-    - name: Sign Release APK
-      uses: r0adkll/sign-android-release@v1
-      id: sign_apk
-      with:
-        releaseDirectory: app/build/outputs/apk/release
-        signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-        alias: ${{ secrets.KEY_ALIAS }}
-        keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_PASSWORD }}
-
-    - name: Sign Release AAB
-      uses: r0adkll/sign-android-release@v1
-      id: sign_aab
-      with:
-        releaseDirectory: app/build/outputs/bundle/release
-        signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-        alias: ${{ secrets.KEY_ALIAS }}
-        keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_PASSWORD }}
-
+    # 4. Upload the perfectly signed APK
     - name: Upload Signed APK as Artifact
       uses: actions/upload-artifact@v4
       with:
         name: JCV_Mock_Tests_Signed_APK
-        path: ${{steps.sign_apk.outputs.signedReleaseFile}}
+        path: app/build/outputs/apk/release/app-release.apk
 
+    # 5. Upload the perfectly signed AAB
     - name: Upload Signed AAB as Artifact
       uses: actions/upload-artifact@v4
       with:
         name: JCV_Mock_Tests_Signed_AAB
-        path: ${{steps.sign_aab.outputs.signedReleaseFile}}
+        path: app/build/outputs/bundle/release/app-release.aab
