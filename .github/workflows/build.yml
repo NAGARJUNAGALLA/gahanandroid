@@ -32,9 +32,9 @@ jobs:
     - name: Build Release AAB
       run: gradle bundleRelease
 
-    # FIX: Manually install the exact build-tools version the signing action requires
+    # FIX: Use the exact path to sdkmanager and auto-accept licenses
     - name: Install Android Build Tools 29.0.3
-      run: sdkmanager "build-tools;29.0.3"
+      run: echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3"
 
     - name: Sign Release APK
       uses: r0adkll/sign-android-release@v1
