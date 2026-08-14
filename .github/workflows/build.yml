@@ -26,24 +26,24 @@ jobs:
       with:
         gradle-version: '8.6'
 
-    # 1. Convert the Base64 secret back into a real keystore file inside the runner
+    # 1. Decode the keystore and save it to the absolute root workspace path
     - name: Decode Keystore
-      run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/release-key.keystore
+      run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ github.workspace }}/release-key.keystore
 
-    # 2. Build and Sign the APK natively using Gradle
+    # 2. Build and Sign the APK natively using the absolute path
     - name: Build and Sign Release APK
       run: >
         gradle assembleRelease
-        -Pandroid.injected.signing.store.file=release-key.keystore
+        -Pandroid.injected.signing.store.file=${{ github.workspace }}/release-key.keystore
         -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }}
         -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }}
         -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-    # 3. Build and Sign the AAB natively using Gradle
+    # 3. Build and Sign the AAB natively using the absolute path
     - name: Build and Sign Release AAB
       run: >
         gradle bundleRelease
-        -Pandroid.injected.signing.store.file=release-key.keystore
+        -Pandroid.injected.signing.store.file=${{ github.workspace }}/release-key.keystore
         -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }}
         -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }}
         -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
