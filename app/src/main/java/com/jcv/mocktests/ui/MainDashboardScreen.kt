@@ -1,5 +1,6 @@
 package com.jcv.mocktests.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -291,8 +292,13 @@ fun MainDashboardScreen(
     }
 }
 
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LocalStudyMaterialScreen() {
+    var webUrl by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(true) }
+    var hasError by remember { mutableStateOf(false) }
+
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
 
@@ -300,34 +306,70 @@ fun LocalStudyMaterialScreen() {
         webViewRef?.goBack()
     }
 
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { context ->
-            WebView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
+    LaunchedEffect(Unit) {
+        val db = FirebaseFirestore.getInstance()
+        db.collection("settings").document("app_config")
+            .get()
+            .addOnSuccessListener { document ->
+                if (document != null && document.exists()) {
+                    webUrl = document.getString("studyMaterialUrl") ?: ""
+                    isLoading = false
+                } else {
+                    hasError = true
+                    isLoading = false
+                }
+            }
+            .addOnFailureListener {
+                hasError = true
+                isLoading = false
+            }
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        when {
+            isLoading -> {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+            hasError || webUrl.isEmpty() -> {
+                Text(
+                    text = "Please connect to the internet.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                
-                webViewClient = object : WebViewClient() {
-                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                        super.doUpdateVisitedHistory(view, url, isReload)
-                        canGoBack = view?.canGoBack() == true
+            }
+            else -> {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { context ->
+                        WebView(context).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            
+                            webViewClient = object : WebViewClient() {
+                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                    super.doUpdateVisitedHistory(view, url, isReload)
+                                    canGoBack = view?.canGoBack() == true
+                                }
+                            }
+                            
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                allowFileAccess = true 
+                                cacheMode = WebSettings.LOAD_NO_CACHE
+                            }
+                            loadUrl(webUrl)
+                            
+                            webViewRef = this
+                        }
                     }
-                }
-                
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    allowFileAccess = true 
-                    cacheMode = WebSettings.LOAD_NO_CACHE
-                }
-                loadUrl("https://jcv-mock-tests.web.app/studymaterial/")
-                
-                webViewRef = this
+                )
             }
         }
-    )
+    }
 }
 
 @Composable
