@@ -3,7 +3,6 @@ package com.jcv.mocktests.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Handler
@@ -14,6 +13,8 @@ import android.util.Log
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -135,10 +136,9 @@ fun CourseDetailScreen(
                     merchantName = doc.getString("merchantName") ?: doc.getString("merchant_name") ?: "JCV MOCK TESTS"
                     staticQrUrl = doc.getString("qrCodeLink") ?: doc.getString("qr_code_link") ?: doc.getString("qrcode") ?: ""
                     foundPaymentDoc = true
-                    break // Stop looping once we find the document with UPI info
+                    break 
                 }
             }
-            // Fallback if fields are completely missing but document exists
             if (!foundPaymentDoc && !snaps.isEmpty) {
                 staticQrUrl = snaps.documents[0].getString("qrCodeLink") ?: snaps.documents[0].getString("qrcode") ?: ""
             }
@@ -265,11 +265,12 @@ fun CourseDetailScreen(
     }
 
     // ==========================================
-    // WEBVIEW WITH FULL MEDIA CONTROLS
+    // WEBVIEW WITH FULL MEDIA CONTROLS & OFFLINE SUPPORT
     // ==========================================
     if (showStudyMaterialWebView) {
         var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
+        var webViewError by remember { mutableStateOf(false) } // Track if the page failed to load
 
         // Media Player States
         var ttsState by remember { mutableStateOf(TtsState.STOPPED) }
@@ -292,7 +293,6 @@ fun CourseDetailScreen(
                 ttsState = TtsState.PLAYING
                 tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "TTS_CHUNK_$currentChunkIndex")
                 
-                // Tell HTML to visually highlight the chunk being read
                 webViewRef?.evaluateJavascript("if(window.highlightChunk) window.highlightChunk($currentChunkIndex);", null)
             }
         }
@@ -307,7 +307,6 @@ fun CourseDetailScreen(
             textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
                 override fun onDone(utteranceId: String?) {
-                    // Move to Next Chunk automatically
                     mainHandler.post { 
                         if (ttsState == TtsState.PLAYING) {
                             if (currentChunkIndex < ttsChunks.size - 1) {
@@ -340,7 +339,7 @@ fun CourseDetailScreen(
 
         BackHandler {
             stopAllSpeech()
-            if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false
+            if (canGoBack && !webViewError) webViewRef?.goBack() else showStudyMaterialWebView = false
         }
 
         Scaffold(
@@ -355,25 +354,22 @@ fun CourseDetailScreen(
                             if (ttsState == TtsState.STOPPED) {
                                 Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) 
                             } else {
-                                // Show progress text when reading
                                 Text("Reading ${currentChunkIndex + 1} of ${ttsChunks.size}", color = Color.White, fontSize = 14.sp)
                             }
                         },
                         navigationIcon = { 
                             if (ttsState == TtsState.STOPPED) {
                                 IconButton(onClick = { 
-                                    if (canGoBack) webViewRef?.goBack() else showStudyMaterialWebView = false 
+                                    if (canGoBack && !webViewError) webViewRef?.goBack() else showStudyMaterialWebView = false 
                                 }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
                             } else {
-                                // Stop reading button replaces back button during playback
                                 IconButton(onClick = { stopAllSpeech() }) { 
                                     Icon(Icons.Default.Close, contentDescription = "Stop", tint = Color.White) 
                                 }
                             }
                         },
                         actions = {
-                            if (ttsState == TtsState.STOPPED) {
-                                // Standard Volume Icon to start
+                            if (ttsState == TtsState.STOPPED && !webViewError) {
                                 IconButton(onClick = {
                                     Toast.makeText(context, "Extracting text...", Toast.LENGTH_SHORT).show()
                                     val js = """
@@ -387,7 +383,6 @@ fun CourseDetailScreen(
                                             textArray.push(document.body.innerText);
                                         }
                                         
-                                        // Inject highlighters
                                         window.highlightChunk = function(index) {
                                             var c = document.querySelectorAll('.tts-chunk');
                                             c.forEach(el => el.classList.remove('tts-highlight'));
@@ -408,10 +403,8 @@ fun CourseDetailScreen(
                                 }) {
                                     Icon(Icons.Default.VolumeUp, contentDescription = "Read Aloud", tint = Color.White)
                                 }
-                            } else {
-                                // MEDIA CONTROLS
+                            } else if (!webViewError) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    // PREV BUTTON
                                     IconButton(
                                         onClick = { 
                                             if (currentChunkIndex > 0) {
@@ -423,7 +416,6 @@ fun CourseDetailScreen(
                                         enabled = currentChunkIndex > 0
                                     ) { Icon(Icons.Default.SkipPrevious, "Previous", tint = if (currentChunkIndex > 0) Color.White else Color.White.copy(alpha=0.3f)) }
 
-                                    // PLAY/PAUSE BUTTON
                                     IconButton(onClick = { 
                                         if (ttsState == TtsState.PLAYING) {
                                             tts?.stop()
@@ -435,7 +427,6 @@ fun CourseDetailScreen(
                                         Icon(if (ttsState == TtsState.PLAYING) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", tint = Color.White) 
                                     }
 
-                                    // NEXT BUTTON
                                     IconButton(
                                         onClick = { 
                                             if (currentChunkIndex < ttsChunks.size - 1) {
@@ -454,55 +445,97 @@ fun CourseDetailScreen(
                 }
             }
         ) { padding ->
-            AndroidView(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                        
-                        webViewClient = object : WebViewClient() {
-                            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                                super.doUpdateVisitedHistory(view, url, isReload)
-                                canGoBack = view?.canGoBack() == true
-                            }
-                        }
-                        webChromeClient = WebChromeClient() 
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                            
+                            webViewClient = object : WebViewClient() {
+                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                    super.doUpdateVisitedHistory(view, url, isReload)
+                                    canGoBack = view?.canGoBack() == true
+                                }
 
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            databaseEnabled = true
-                            cacheMode = if (isOnline(ctx)) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_CACHE_ELSE_NETWORK
-                        }
-                        
-                        // Handle receiving chunks from WebView
-                        addJavascriptInterface(WebAppInterface { jsonChunks ->
-                            mainHandler.post {
-                                try {
-                                    val jsonArray = JSONArray(jsonChunks)
-                                    val extractedChunks = mutableListOf<String>()
-                                    for (i in 0 until jsonArray.length()) {
-                                        extractedChunks.add(jsonArray.getString(i))
+                                // INTERCEPT ERROR TO HIDE URL AND SHOW CUSTOM UI
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    error: WebResourceError?
+                                ) {
+                                    super.onReceivedError(view, request, error)
+                                    if (request?.isForMainFrame == true) {
+                                        webViewError = true
                                     }
-                                    
-                                    if (extractedChunks.isNotEmpty()) {
-                                        ttsChunks = extractedChunks
-                                        currentChunkIndex = 0
-                                        playCurrentChunk()
-                                    } else {
-                                        Toast.makeText(context, "No text found.", Toast.LENGTH_SHORT).show()
-                                    }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error extracting text.", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                        }, "AndroidTTS")
-                        
-                        loadUrl(studyMaterialUrl)
-                        webViewRef = this
+                            webChromeClient = WebChromeClient() 
+
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                databaseEnabled = true
+                                // LIVE UPDATES ONLINE, OFFLINE CACHE STORAGE OFFLINE
+                                cacheMode = if (isOnline(ctx)) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
+                            }
+                            
+                            addJavascriptInterface(WebAppInterface { jsonChunks ->
+                                mainHandler.post {
+                                    try {
+                                        val jsonArray = JSONArray(jsonChunks)
+                                        val extractedChunks = mutableListOf<String>()
+                                        for (i in 0 until jsonArray.length()) {
+                                            extractedChunks.add(jsonArray.getString(i))
+                                        }
+                                        
+                                        if (extractedChunks.isNotEmpty()) {
+                                            ttsChunks = extractedChunks
+                                            currentChunkIndex = 0
+                                            playCurrentChunk()
+                                        } else {
+                                            Toast.makeText(context, "No text found.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Error extracting text.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }, "AndroidTTS")
+                            
+                            loadUrl(studyMaterialUrl)
+                            webViewRef = this
+                        }
+                    }
+                )
+
+                // OVERLAY CUSTOM UI IF THERE IS AN ERROR
+                if (webViewError) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.WifiOff, contentDescription = "No Internet", modifier = Modifier.size(64.dp), tint = Color.Gray)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Please connect to the internet", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("We couldn't load the study material offline.", color = Color.Gray, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Button(
+                                onClick = { 
+                                    webViewError = false
+                                    webViewRef?.reload() 
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
+                            ) {
+                                Text("Retry Connection")
+                            }
+                        }
                     }
                 }
-            )
+            }
         }
         return
     }
