@@ -4,7 +4,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -75,6 +77,33 @@ enum class TtsState { STOPPED, PLAYING, PAUSED }
 data class TestSummary(val name: String, val questionCount: Int, val timeMinutes: Int)
 data class BookmarkedQuestion(val testName: String, val sectionName: String, val questionText: String, val options: List<String>, val correctOptionIndex: Int)
 
+// 2. AUTOMATIC NETWORK OBSERVER
+@Composable
+fun rememberNetworkConnectivity(context: Context): State<Boolean> {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val isConnected = remember { mutableStateOf(isOnline(context)) }
+
+    DisposableEffect(connectivityManager) {
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                isConnected.value = true
+            }
+            override fun onLost(network: Network) {
+                isConnected.value = false
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        connectivityManager.registerNetworkCallback(request, networkCallback)
+
+        onDispose {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        }
+    }
+    return isConnected
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CourseDetailScreen(
@@ -89,6 +118,9 @@ fun CourseDetailScreen(
     val localStorage = remember { LocalStorage(context) }
     val examPrefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) } 
     val auth = remember { FirebaseAuth.getInstance() }
+    
+    // Live Network State
+    val isConnected by rememberNetworkConnectivity(context)
     
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("OVERVIEW", "CONTENT", "SAVED") 
@@ -113,6 +145,18 @@ fun CourseDetailScreen(
     var subscriptionExpiry by remember { mutableStateOf<Date?>(null) } 
     var showPaymentDialog by remember { mutableStateOf(false) }
     var isSubmittingPayment by remember { mutableStateOf(false) }
+    
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var webViewError by remember { mutableStateOf(false) }
+
+    // AUTO-RELOAD LOGIC
+    // If the internet reconnects and there was a web view error, reload automatically.
+    LaunchedEffect(isConnected) {
+        if (isConnected && webViewError && showStudyMaterialWebView) {
+            webViewError = false
+            webViewRef?.reload()
+        }
+    }
 
     LaunchedEffect(selectedTab) {
         if (selectedTab != 1) currentContentFolder = null
@@ -126,7 +170,6 @@ fun CourseDetailScreen(
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
-        // 1. SAFELY FETCH PAYMENT SETTINGS
         db.collection("settings").get().addOnSuccessListener { snaps ->
             var foundPaymentDoc = false
             for (doc in snaps.documents) {
@@ -146,7 +189,6 @@ fun CourseDetailScreen(
             Log.e("FirestoreError", "Error loading settings: ${e.message}")
         }
 
-        // 2. FETCH EXAM DETAILS
         db.collection("exams").document("testList").get().addOnSuccessListener { doc ->
             val testsArray = doc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             val matchedCourse = testsArray.find { it["sheetId"] == courseId }
@@ -158,7 +200,6 @@ fun CourseDetailScreen(
             }
         }
 
-        // 3. FETCH REGISTRATION STATUS
         if (uid != null) {
             db.collection("pending_registrations").whereEqualTo("uid", uid).whereEqualTo("sheetId", courseId).addSnapshotListener { snap, _ ->
                 if (snap != null && !snap.isEmpty) {
@@ -181,7 +222,6 @@ fun CourseDetailScreen(
             }
         }
 
-        // 4. FETCH QUESTIONS
         db.collection("pro_course_questions").document(courseId).get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
@@ -268,9 +308,7 @@ fun CourseDetailScreen(
     // WEBVIEW WITH FULL MEDIA CONTROLS & OFFLINE SUPPORT
     // ==========================================
     if (showStudyMaterialWebView) {
-        var webViewRef by remember { mutableStateOf<WebView?>(null) }
         var canGoBack by remember { mutableStateOf(false) }
-        var webViewError by remember { mutableStateOf(false) } // Track if the page failed to load
 
         // Media Player States
         var ttsState by remember { mutableStateOf(TtsState.STOPPED) }
@@ -280,28 +318,22 @@ fun CourseDetailScreen(
         var tts by remember { mutableStateOf<TextToSpeech?>(null) }
         val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
-        // Playback Logic
         fun playCurrentChunk() {
             if (ttsChunks.isNotEmpty() && currentChunkIndex in ttsChunks.indices) {
                 val rawText = ttsChunks[currentChunkIndex]
-                
-                // FILTER OUT EMOJIS & SYMBOLS BEFORE READING
                 val cleanText = rawText
-                    .replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "") // Strips standard Emojis
-                    .replace(Regex("[📄📁🔖📑⭐🎓🔥✓❌]"), "") // Specific requested symbols
+                    .replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "") 
+                    .replace(Regex("[📄📁🔖📑⭐🎓🔥✓❌]"), "") 
                 
                 ttsState = TtsState.PLAYING
                 tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "TTS_CHUNK_$currentChunkIndex")
-                
                 webViewRef?.evaluateJavascript("if(window.highlightChunk) window.highlightChunk($currentChunkIndex);", null)
             }
         }
 
         DisposableEffect(context) {
             val textToSpeech = TextToSpeech(context) { status ->
-                if (status == TextToSpeech.SUCCESS) {
-                    tts?.language = Locale("te", "IN") 
-                }
+                if (status == TextToSpeech.SUCCESS) tts?.language = Locale("te", "IN") 
             }
             
             textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -345,9 +377,7 @@ fun CourseDetailScreen(
         Scaffold(
             topBar = {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(primaryGradient)
+                    modifier = Modifier.fillMaxWidth().background(primaryGradient)
                 ) {
                     TopAppBar(
                         title = { 
@@ -476,8 +506,7 @@ fun CourseDetailScreen(
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
                                 databaseEnabled = true
-                                // LIVE UPDATES ONLINE, OFFLINE CACHE STORAGE OFFLINE
-                                cacheMode = if (isOnline(ctx)) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
+                                cacheMode = if (isConnected) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
                             }
                             
                             addJavascriptInterface(WebAppInterface { jsonChunks ->
@@ -508,7 +537,7 @@ fun CourseDetailScreen(
                     }
                 )
 
-                // OVERLAY CUSTOM UI IF THERE IS AN ERROR
+                // OVERLAY CUSTOM UI IF THERE IS AN ERROR (AUTO DISAPPEARS WHEN ONLINE)
                 if (webViewError) {
                     Box(
                         modifier = Modifier
@@ -519,19 +548,11 @@ fun CourseDetailScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.WifiOff, contentDescription = "No Internet", modifier = Modifier.size(64.dp), tint = Color.Gray)
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text("Please connect to the internet", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
+                            Text("No Internet Connection", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("We couldn't load the study material offline.", color = Color.Gray, fontSize = 14.sp)
+                            Text("Waiting for network to reload...", color = Color.Gray, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(24.dp))
-                            Button(
-                                onClick = { 
-                                    webViewError = false
-                                    webViewRef?.reload() 
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
-                            ) {
-                                Text("Retry Connection")
-                            }
+                            CircularProgressIndicator(color = themePrimaryColor, modifier = Modifier.size(24.dp))
                         }
                     }
                 }
