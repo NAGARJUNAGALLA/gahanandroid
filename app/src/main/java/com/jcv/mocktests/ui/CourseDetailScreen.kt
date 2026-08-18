@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -124,15 +125,28 @@ fun CourseDetailScreen(
         val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
+        // 1. SAFELY FETCH PAYMENT SETTINGS
         db.collection("settings").get().addOnSuccessListener { snaps ->
-            if (!snaps.isEmpty) {
-                val sData = snaps.documents[0]
-                upiId = sData.getString("upiId") ?: sData.getString("upi_id") ?: ""
-                merchantName = sData.getString("merchantName") ?: sData.getString("merchant_name") ?: "JCV MOCK TESTS"
-                staticQrUrl = sData.getString("qrCodeLink") ?: sData.getString("qr_code_link") ?: sData.getString("qrcode") ?: ""
+            var foundPaymentDoc = false
+            for (doc in snaps.documents) {
+                val fetchedUpi = doc.getString("upiId") ?: doc.getString("upi_id")
+                if (!fetchedUpi.isNullOrBlank()) {
+                    upiId = fetchedUpi
+                    merchantName = doc.getString("merchantName") ?: doc.getString("merchant_name") ?: "JCV MOCK TESTS"
+                    staticQrUrl = doc.getString("qrCodeLink") ?: doc.getString("qr_code_link") ?: doc.getString("qrcode") ?: ""
+                    foundPaymentDoc = true
+                    break // Stop looping once we find the document with UPI info
+                }
             }
+            // Fallback if fields are completely missing but document exists
+            if (!foundPaymentDoc && !snaps.isEmpty) {
+                staticQrUrl = snaps.documents[0].getString("qrCodeLink") ?: snaps.documents[0].getString("qrcode") ?: ""
+            }
+        }.addOnFailureListener { e ->
+            Log.e("FirestoreError", "Error loading settings: ${e.message}")
         }
 
+        // 2. FETCH EXAM DETAILS
         db.collection("exams").document("testList").get().addOnSuccessListener { doc ->
             val testsArray = doc.get("tests") as? List<Map<String, Any>> ?: emptyList()
             val matchedCourse = testsArray.find { it["sheetId"] == courseId }
@@ -144,6 +158,7 @@ fun CourseDetailScreen(
             }
         }
 
+        // 3. FETCH REGISTRATION STATUS
         if (uid != null) {
             db.collection("pending_registrations").whereEqualTo("uid", uid).whereEqualTo("sheetId", courseId).addSnapshotListener { snap, _ ->
                 if (snap != null && !snap.isEmpty) {
@@ -166,6 +181,7 @@ fun CourseDetailScreen(
             }
         }
 
+        // 4. FETCH QUESTIONS
         db.collection("pro_course_questions").document(courseId).get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
@@ -900,7 +916,7 @@ fun PaymentDialog(
     var utr by remember { mutableStateOf("") }
     val apps = listOf("PhonePe", "Google Pay (GPay)", "Paytm", "Other")
     
-    val qrUrl = remember(upiId, staticQrUrl, totalFee) {
+    val qrUrl = remember(upiId, merchantName, staticQrUrl, totalFee) {
         if (upiId.isNotBlank()) "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${URLEncoder.encode("upi://pay?pa=$upiId&pn=${URLEncoder.encode(merchantName, "UTF-8")}&am=${totalFee}&cu=INR", "UTF-8")}" else staticQrUrl
     }
 
