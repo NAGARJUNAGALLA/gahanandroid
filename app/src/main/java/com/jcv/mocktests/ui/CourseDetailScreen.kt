@@ -153,7 +153,6 @@ fun CourseDetailScreen(
     LaunchedEffect(isConnected) {
         if (isConnected && webViewError && showStudyMaterialWebView) {
             webViewError = false
-            // Use loadUrl instead of reload, because the page was wiped blank
             if (studyMaterialUrl.isNotBlank()) {
                 webViewRef?.loadUrl(studyMaterialUrl)
             }
@@ -490,7 +489,6 @@ fun CourseDetailScreen(
                                     canGoBack = view?.canGoBack() == true
                                 }
 
-                                // INSTANTLY HIDE DEFAULT ANDROID ERROR PAGE
                                 override fun onReceivedError(
                                     view: WebView?,
                                     request: WebResourceRequest?,
@@ -499,7 +497,6 @@ fun CourseDetailScreen(
                                     super.onReceivedError(view, request, error)
                                     if (request?.isForMainFrame == true) {
                                         webViewError = true
-                                        // Load a completely blank page to hide the exposed URL
                                         view?.loadUrl("about:blank")
                                     }
                                 }
@@ -510,6 +507,9 @@ fun CourseDetailScreen(
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
                                 databaseEnabled = true
+                                // Enable mixed content if images load from different HTTP/HTTPS servers
+                                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                // The critical line for Live Update + Cache
                                 cacheMode = if (isConnected) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
                             }
                             
