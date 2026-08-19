@@ -149,12 +149,14 @@ fun CourseDetailScreen(
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var webViewError by remember { mutableStateOf(false) }
 
-    // AUTO-RELOAD LOGIC
-    // If the internet reconnects and there was a web view error, reload automatically.
+    // AUTO-RELOAD LOGIC: Triggers the moment internet reconnects
     LaunchedEffect(isConnected) {
         if (isConnected && webViewError && showStudyMaterialWebView) {
             webViewError = false
-            webViewRef?.reload()
+            // Use loadUrl instead of reload, because the page was wiped blank
+            if (studyMaterialUrl.isNotBlank()) {
+                webViewRef?.loadUrl(studyMaterialUrl)
+            }
         }
     }
 
@@ -488,7 +490,7 @@ fun CourseDetailScreen(
                                     canGoBack = view?.canGoBack() == true
                                 }
 
-                                // INTERCEPT ERROR TO HIDE URL AND SHOW CUSTOM UI
+                                // INSTANTLY HIDE DEFAULT ANDROID ERROR PAGE
                                 override fun onReceivedError(
                                     view: WebView?,
                                     request: WebResourceRequest?,
@@ -497,6 +499,8 @@ fun CourseDetailScreen(
                                     super.onReceivedError(view, request, error)
                                     if (request?.isForMainFrame == true) {
                                         webViewError = true
+                                        // Load a completely blank page to hide the exposed URL
+                                        view?.loadUrl("about:blank")
                                     }
                                 }
                             }
@@ -537,7 +541,7 @@ fun CourseDetailScreen(
                     }
                 )
 
-                // OVERLAY CUSTOM UI IF THERE IS AN ERROR (AUTO DISAPPEARS WHEN ONLINE)
+                // OVERLAY CUSTOM UI (No Retry button, auto-reloads via LaunchedEffect)
                 if (webViewError) {
                     Box(
                         modifier = Modifier
