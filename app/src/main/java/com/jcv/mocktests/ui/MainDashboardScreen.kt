@@ -494,44 +494,149 @@ fun CourseGridScreen(title: String, courses: List<CourseModel>, approvedSheetIds
 
 @Composable
 fun CourseCardView(course: CourseModel, isUnlocked: Boolean, onClick: () -> Unit) {
-    val bannerGradient = Brush.verticalGradient(listOf(Color(0xFF3B0000), Color(0xFF050000)))
-    val ribbonGradient = Brush.horizontalGradient(listOf(Color(0xFF8B0000), Color(0xFFD32F2F), Color(0xFF8B0000)))
+    // Custom Colors extracted from the design
+    val outerBorderColor = Color(0xFF212936)
+    val titleColor = Color(0xFF233876)
+    val orangeButtonColor = Color(0xFFFF8216)
+    val discountBgColor = Color(0xFFD1FAE5)
+    val discountTextColor = Color(0xFF059669)
     
+    // Calculate the original fee assuming an 85% discount
+    val originalFee = if (course.fee > 0) (course.fee / 0.15).toInt() else 0
+
     Card(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).clickable { onClick() },
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), 
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+            .clickable { onClick() }
+            .border(10.dp, outerBorderColor, RoundedCornerShape(38.dp)), // Thick phone-like border
+        shape = RoundedCornerShape(38.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.Top) {
-            Box(modifier = Modifier.width(130.dp).height(95.dp).background(bannerGradient, RoundedCornerShape(16.dp)).border(1.dp, Color(0xFFFFD700).copy(alpha = 0.6f), RoundedCornerShape(16.dp)).padding(6.dp)) {
-                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                        Image(painter = painterResource(id = R.drawable.logo), contentDescription = "Logo", modifier = Modifier.size(18.dp).clip(CircleShape).background(Color.White))
-                        Box(modifier = Modifier.background(ribbonGradient, RoundedCornerShape(4.dp)).border(0.5.dp, Color(0xFFFFD700), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                            Text(text = if (course.fee > 0) "PRO" else "FREE", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 20.dp)
+        ) {
+            // 1. Mock Status Bar (Time, Dynamic Island, Signal/Battery)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("19:54", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                
+                // Dynamic Island Mockup
+                Box(
+                    modifier = Modifier
+                        .width(70.dp)
+                        .height(20.dp)
+                        .background(Color.Black, RoundedCornerShape(50))
+                )
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.SignalCellularAlt, 
+                        contentDescription = "Signal", 
+                        tint = Color(0xFFFDB813), 
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("100%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFDB813))
+                }
+            }
+
+            // 2. Course Title Row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+                // Dynamically change icon based on title keywords
+                val iconEmoji = if (course.title.contains("Banking", ignoreCase = true)) "📘" else "🎓"
+                Text(text = iconEmoji, fontSize = 24.sp)
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Text(
+                    text = course.title,
+                    color = titleColor,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Divider
+            Divider(color = Color.LightGray.copy(alpha = 0.3f), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 3. Details Box (Fee & Validity)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color.LightGray.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column {
+                    // Fee Row
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Fee: ", fontWeight = FontWeight.Bold, color = Color.DarkGray, fontSize = 14.sp)
+                        if (course.fee > 0) {
+                            Text("₹$originalFee ", textDecoration = TextDecoration.LineThrough, color = Color.Gray, fontSize = 14.sp)
+                        }
+                        Text(
+                            text = if (course.fee > 0) "₹${course.fee.toInt()}" else "FREE", 
+                            fontWeight = FontWeight.ExtraBold, 
+                            color = Color.Black, 
+                            fontSize = 16.sp
+                        )
+                        
+                        if (course.fee > 0) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            // Discount Tag
+                            Box(
+                                modifier = Modifier
+                                    .background(discountBgColor, RoundedCornerShape(50))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text("85% OFF", color = discountTextColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
-                    Text(text = course.title.uppercase(), color = Color(0xFFFFD700), fontSize = 11.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 13.sp)
-                    Box(modifier = Modifier.background(Color(0xFF1E3A8A), RoundedCornerShape(4.dp)).border(0.5.dp, Color(0xFF60A5FA), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(text = "${course.durationMonths} MONTHS", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Validity Row
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Validity: ", fontWeight = FontWeight.Bold, color = Color.DarkGray, fontSize = 14.sp)
+                        Text("${course.durationMonths} Months", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { CourseTag("TESTS"); CourseTag("VIDEOS") }
-                    Icon(if (isUnlocked) Icons.Default.CheckCircle else Icons.Default.Lock, contentDescription = null, tint = if (isUnlocked) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
-                }
-                Text(text = course.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 8.dp), lineHeight = 18.sp)
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(text = "₹${course.fee.toInt()}", fontWeight = FontWeight.Black, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "₹${(course.fee * 5).toInt()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textDecoration = TextDecoration.LineThrough, modifier = Modifier.padding(bottom = 2.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "80% OFF", fontSize = 11.sp, color = Color(0xFFE07A5F), fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 2.dp))
-                }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 4. Action Button
+            Button(
+                onClick = onClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isUnlocked) Color(0xFF4CAF50) else orangeButtonColor
+                ),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(
+                    text = if (isUnlocked) "Open Course" else "Enroll Now", 
+                    fontWeight = FontWeight.Bold, 
+                    fontSize = 16.sp, 
+                    color = Color.White
+                )
             }
         }
     }
