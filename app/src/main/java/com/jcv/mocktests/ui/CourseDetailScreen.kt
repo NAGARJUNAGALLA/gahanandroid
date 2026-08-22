@@ -796,9 +796,8 @@ fun CourseDetailScreen(
                                             val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
                                             val testScore = localStorage.getTestScore(courseId, test.name)
                                             
-                                            // SEQUENTIAL UNLOCKING LOGIC: 
-                                            // Unlock if it's the very first test, OR if the previous test was attempted.
-                                            val isUnlocked = index == 0 || localStorage.isTestAttempted(courseId, tests[index - 1].name)
+                                            // ALL TESTS UNLOCKED:
+                                            val isUnlocked = true
                                             
                                             Card(
                                                 modifier = Modifier
