@@ -285,6 +285,15 @@ fun ExamScreen(
                             Text("Choose Language: English | I have read and understood the instructions.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         }
                         
+                        // NEW RED TEXT ADDED HERE
+                        Text(
+                            text = "Choose Positive Marks and Negative Marks",
+                            color = Color.Red,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(start = 12.dp, top = 8.dp)
+                        )
+
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
                             OutlinedButton(
                                 onClick = { isPosDropdownExpanded = true },
@@ -1083,6 +1092,29 @@ fun ExamScreen(
                                     }
                                 }
                             }
+
+                            // NEW SKIPPED INDICATOR (Only shows in review mode if no option was selected)
+                            item {
+                                if (isReviewMode && currentState.selectedOption == null) {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                        border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Info, contentDescription = "Skipped", tint = Color.Gray)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Question Skipped / Not Attempted", color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1146,7 +1178,14 @@ fun MathText(
                         inlineMath: [['$', '$'], ['\\(', '\\)']],
                         displayMath: [['$$', '$$'], ['\\[', '\\]']]
                     },
-                    startup: { typeset: true }
+                    startup: { 
+                        typeset: true,
+                        pageReady: () => {
+                            return MathJax.startup.defaultPageReady().then(() => {
+                                document.body.style.visibility = 'visible';
+                            });
+                        }
+                    }
                 };
             </script>
             <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -1159,6 +1198,7 @@ fun MathText(
                     padding: 0;
                     background-color: transparent;
                     word-wrap: break-word;
+                    visibility: hidden; /* Hide initially to prevent MathJax raw text flash */
                     
                     -webkit-touch-callout: none; 
                     -webkit-user-select: none;   
