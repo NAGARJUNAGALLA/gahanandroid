@@ -29,6 +29,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -127,7 +128,6 @@ fun CourseDetailScreen(
     
     var tests by remember { mutableStateOf<List<TestSummary>>(emptyList()) }
     var bookmarkedQuestions by remember { mutableStateOf<List<BookmarkedQuestion>>(emptyList()) }
-    var courseSubjects by remember { mutableStateOf<List<String>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     var upiId by remember { mutableStateOf("") }
@@ -229,16 +229,11 @@ fun CourseDetailScreen(
                     val testsMap = doc.data?.get("tests") as? Map<String, Any>
                     val parsedTests = mutableListOf<TestSummary>()
                     val parsedBookmarks = mutableListOf<BookmarkedQuestion>()
-                    val subjectsSet = mutableSetOf<String>() 
                     
                     testsMap?.forEach { (testName, testData) ->
                         var qCount = 0
                         val specificTest = testData as? Map<String, List<Map<String, Any>>>
                         
-                        specificTest?.keys?.forEach { subjectName ->
-                            subjectsSet.add(subjectName)
-                        }
-
                         try { specificTest?.forEach { (_, qList) -> qCount += qList.size } } catch (e: Exception) { }
                         parsedTests.add(TestSummary(name = testName, questionCount = qCount, timeMinutes = qCount))
 
@@ -265,9 +260,11 @@ fun CourseDetailScreen(
                             }
                         }
                     }
+                    
+                    // ALPHABETICAL ORDER SORTING (Ascending)
+                    parsedTests.sortBy { it.name }
                     tests = parsedTests
                     bookmarkedQuestions = parsedBookmarks 
-                    courseSubjects = subjectsSet.toList()
                 }
                 isLoading = false
             }.addOnFailureListener { isLoading = false }
@@ -507,9 +504,7 @@ fun CourseDetailScreen(
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
                                 databaseEnabled = true
-                                // Enable mixed content if images load from different HTTP/HTTPS servers
                                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                // The critical line for Live Update + Cache
                                 cacheMode = if (isConnected) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
                             }
                             
@@ -541,7 +536,6 @@ fun CourseDetailScreen(
                     }
                 )
 
-                // OVERLAY CUSTOM UI (No Retry button, auto-reloads via LaunchedEffect)
                 if (webViewError) {
                     Box(
                         modifier = Modifier
@@ -680,40 +674,6 @@ fun CourseDetailScreen(
                                 }
                             }
                         }
-                        
-                        if (courseSubjects.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text("Subject Analysis", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                elevation = CardDefaults.cardElevation(2.dp),
-                                shape = RoundedCornerShape(24.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(20.dp)) {
-                                    courseSubjects.forEachIndexed { index, subject ->
-                                        val displayProgress = accuracy / 100f
-                                        
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text(subject.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                            Text("$accuracy%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accuracyColor)
-                                        }
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        LinearProgressIndicator(
-                                            progress = displayProgress,
-                                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                                            color = accuracyColor,
-                                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                        )
-                                        if (index < courseSubjects.size - 1) {
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                        }
-                                    }
-                                }
-                            }
-                        }
                         Spacer(modifier = Modifier.height(24.dp))
                     }
 
@@ -827,45 +787,131 @@ fun CourseDetailScreen(
                                         Text("Mock Tests", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onBackground)
                                     }
 
-                                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        items(tests) { test ->
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxWidth().weight(1f), 
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), 
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        itemsIndexed(tests) { index, test ->
                                             val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
                                             val testScore = localStorage.getTestScore(courseId, test.name)
                                             
-                                            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), shape = RoundedCornerShape(24.dp)) {
-                                                Column(modifier = Modifier.padding(16.dp)) {
-                                                    Text(text = test.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                                    Spacer(modifier = Modifier.height(12.dp))
-                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Icon(Icons.Default.List, contentDescription = "Questions", modifier = Modifier.size(16.dp), tint = Color.Gray)
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Text("${test.questionCount} Questions", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                            // SEQUENTIAL UNLOCKING LOGIC: 
+                                            // Unlock if it's the very first test, OR if the previous test was attempted.
+                                            val isUnlocked = index == 0 || localStorage.isTestAttempted(courseId, tests[index - 1].name)
+                                            
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(20.dp))
+                                                    .clickable(enabled = isUnlocked || alreadyAttempted) {
+                                                        if (alreadyAttempted) {
+                                                            onNavigateToExam(courseId, test.name, true)
+                                                        } else if (isUnlocked) {
+                                                            onNavigateToExam(courseId, test.name, false)
                                                         }
-                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Icon(Icons.Default.DateRange, contentDescription = "Time", modifier = Modifier.size(16.dp), tint = Color.Gray)
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Text("${test.timeMinutes} Mins", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                                    },
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = if (alreadyAttempted) Color(0xFFF9FAFB) 
+                                                                     else if (isUnlocked) MaterialTheme.colorScheme.surface 
+                                                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                ),
+                                                elevation = CardDefaults.cardElevation(defaultElevation = if (isUnlocked) 4.dp else 0.dp),
+                                                border = if (alreadyAttempted) BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)) else null
+                                            ) {
+                                                Column(modifier = Modifier.padding(16.dp)) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        // Icon and Title Block
+                                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(48.dp)
+                                                                    .background(
+                                                                        color = if (alreadyAttempted) Color(0xFFE8F5E9) else if (isUnlocked) themePrimaryColor.copy(alpha = 0.1f) else Color.LightGray.copy(alpha = 0.2f),
+                                                                        shape = CircleShape
+                                                                    ),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = if (alreadyAttempted) Icons.Default.CheckCircle else if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                                                                    contentDescription = null,
+                                                                    tint = if (alreadyAttempted) Color(0xFF4CAF50) else if (isUnlocked) themePrimaryColor else Color.Gray
+                                                                )
+                                                            }
+                                                            Spacer(modifier = Modifier.width(16.dp))
+                                                            Column {
+                                                                Text(
+                                                                    text = test.name,
+                                                                    style = MaterialTheme.typography.titleMedium,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = if (isUnlocked) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                                    Text("${test.questionCount} Qs", fontSize = 12.sp, color = Color.Gray)
+                                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                                    Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                                    Text("${test.timeMinutes} Mins", fontSize = 12.sp, color = Color.Gray)
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Score Block (If Completed)
+                                                        if (alreadyAttempted && testScore != null) {
+                                                            val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
+                                                            Column(horizontalAlignment = Alignment.End) {
+                                                                Text("Score", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                                                Text(
+                                                                    text = "${formatScore(testScore.first)}/${formatScore(testScore.second)}",
+                                                                    color = Color(0xFF27AE60),
+                                                                    fontWeight = FontWeight.Black,
+                                                                    fontSize = 16.sp
+                                                                )
+                                                            }
                                                         }
                                                     }
+
                                                     Spacer(modifier = Modifier.height(16.dp))
-                                                    Divider(color = MaterialTheme.colorScheme.surfaceVariant)
-                                                    Spacer(modifier = Modifier.height(16.dp))
-                                                    
-                                                    if (alreadyAttempted && testScore != null) {
-                                                        val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
-                                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                            Column {
-                                                                Text("Highest Score", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-                                                                Text(text = "${formatScore(testScore.first)} / ${formatScore(testScore.second)}", color = Color(0xFF27AE60), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                                            }
-                                                            OutlinedButton(onClick = { onNavigateToExam(courseId, test.name, true) }, colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor), shape = RoundedCornerShape(50)) {
-                                                                Text("Review Test", fontWeight = FontWeight.Bold)
-                                                            }
+
+                                                    // Action Button
+                                                    if (alreadyAttempted) {
+                                                        OutlinedButton(
+                                                            onClick = { onNavigateToExam(courseId, test.name, true) },
+                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor),
+                                                            shape = RoundedCornerShape(12.dp)
+                                                        ) {
+                                                            Text("REVIEW EXAM", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                        }
+                                                    } else if (isUnlocked) {
+                                                        Button(
+                                                            onClick = { onNavigateToExam(courseId, test.name, false) },
+                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                                                            colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor),
+                                                            shape = RoundedCornerShape(12.dp)
+                                                        ) {
+                                                            Text("START EXAM", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                                         }
                                                     } else {
-                                                        Button(onClick = { onNavigateToExam(courseId, test.name, false) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)) {
-                                                            Text("Take Test", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                        Button(
+                                                            onClick = { },
+                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                                                            colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray, contentColor = Color.DarkGray),
+                                                            shape = RoundedCornerShape(12.dp),
+                                                            enabled = false
+                                                        ) {
+                                                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                            Text("LOCKED", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                                         }
                                                     }
                                                 }
