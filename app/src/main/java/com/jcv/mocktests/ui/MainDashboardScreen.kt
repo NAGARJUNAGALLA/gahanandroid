@@ -53,8 +53,8 @@ import kotlinx.coroutines.launch
 enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES, STUDY_MATERIAL }
 
 private val PastelColors = listOf(
-    Color(0xFFFFF3E0), Color(0xFFFCE4EC), Color(0xFFF0F4C3), 
-    Color(0xFFD7CCC8), Color(0xFFF3E5F5), Color(0xFFE8F5E9), Color(0xFFE0F7FA)  
+    Color(0xFFE3F2FD), Color(0xFFF3E5F5), Color(0xFFE8F5E9), 
+    Color(0xFFFFF3E0), Color(0xFFFFEBEE), Color(0xFFE0F7FA)  
 )
 
 data class CourseModel(
@@ -227,7 +227,6 @@ fun MainDashboardScreen(
     ) {
         Scaffold(
             topBar = {
-                // Clean Rectangular Header
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -412,10 +411,40 @@ fun DashboardHomeContent(
     val homeCategories = listOf("Pro Courses", "Purchased", "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET")
 
     if (selectedCategory == null) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 20.dp)) {
             UserProfileHeader(auth)
-            Text(text = "Welcome to JCV MOCK Tests and Thanks for Choosing JCV MOCK TESTS", color = themePrimaryColor, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).basicMarquee())
-            LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+            
+            // Marquee Welcome Message
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = themePrimaryColor.copy(alpha = 0.1f)),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, themePrimaryColor.copy(alpha = 0.3f))
+            ) {
+                Text(
+                    text = "🚀 Welcome to JCV MOCK Tests! Thanks for Choosing Us. Master your exams today! 🚀", 
+                    color = themePrimaryColor, 
+                    fontSize = 13.sp, 
+                    fontWeight = FontWeight.Bold, 
+                    maxLines = 1, 
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).basicMarquee()
+                )
+            }
+
+            Text(
+                text = "Explore Categories", 
+                fontSize = 18.sp, 
+                fontWeight = FontWeight.Black, 
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2), 
+                horizontalArrangement = Arrangement.spacedBy(16.dp), 
+                verticalArrangement = Arrangement.spacedBy(16.dp), 
+                modifier = Modifier.fillMaxSize()
+            ) {
                 itemsIndexed(homeCategories) { index, categoryName -> 
                     val catBg = if (isDarkMode) MaterialTheme.colorScheme.surfaceVariant else PastelColors[index % PastelColors.size]
                     PastelCategoryCard(categoryName, catBg) { selectedCategory = categoryName } 
@@ -438,7 +467,7 @@ fun DashboardHomeContent(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
                 IconButton(onClick = { selectedCategory = null }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = themePrimaryColor) }
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = selectedCategory ?: "", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                Text(text = selectedCategory ?: "", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
             }
             if (isLoading && allCourses.isEmpty()) LoadingLogo(themePrimaryColor) 
             else if (displayedCourses.isEmpty()) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No courses found in this category.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -453,30 +482,71 @@ fun DashboardHomeContent(
 
 @Composable
 fun UserProfileHeader(auth: FirebaseAuth) {
-    val userName = auth.currentUser?.displayName?.uppercase() ?: "STUDENT NAME"
-    val mobileNumber = auth.currentUser?.phoneNumber ?: "Mobile Number Not Set"
-    Card(
-        modifier = Modifier.fillMaxWidth(), 
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), 
-        shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    val userName = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Student"
+    
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Image(painter = painterResource(id = R.drawable.logo), contentDescription = "App Logo", modifier = Modifier.size(60.dp).clip(RoundedCornerShape(16.dp)).border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)))
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                Text(userName, fontWeight = FontWeight.Black, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface) 
-                Text(mobileNumber, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Hello, $userName 👋", 
+                fontSize = 22.sp, 
+                fontWeight = FontWeight.Black, 
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "What would you like to learn today?", 
+                fontSize = 14.sp, 
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+        Spacer(modifier = Modifier.width(16.dp))
+        Image(
+            painter = painterResource(id = R.drawable.logo), 
+            contentDescription = "App Logo", 
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), CircleShape)
+        )
     }
 }
 
 @Composable
 fun PastelCategoryCard(title: String, backgroundColor: Color, onClick: () -> Unit) {
-    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = backgroundColor), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), modifier = Modifier.height(110.dp).clickable { onClick() }) {
-        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Box(modifier = Modifier.size(36.dp).background(Color.White.copy(alpha = 0.8f), CircleShape).align(Alignment.TopStart), contentAlignment = Alignment.Center) { Text("🎓", fontSize = 18.sp) }
-            Text(text = title, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.align(Alignment.BottomEnd)) 
+    val textColor = if (backgroundColor.red * 0.299 + backgroundColor.green * 0.587 + backgroundColor.blue * 0.114 > 0.5) Color.Black.copy(alpha = 0.8f) else Color.White
+    
+    Card(
+        shape = RoundedCornerShape(24.dp), 
+        colors = CardDefaults.cardColors(containerColor = backgroundColor), 
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), 
+        modifier = Modifier.height(110.dp).clickable { onClick() }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color.White.copy(alpha = 0.6f), CircleShape), 
+                contentAlignment = Alignment.Center
+            ) { 
+                Text(if (title.contains("Pro", true)) "🌟" else if (title.contains("Purchased", true)) "🎒" else "📚", fontSize = 16.sp) 
+            }
+            Text(
+                text = title, 
+                color = textColor, 
+                fontSize = 15.sp, 
+                fontWeight = FontWeight.ExtraBold, 
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            ) 
         }
     }
 }
@@ -484,7 +554,7 @@ fun PastelCategoryCard(title: String, backgroundColor: Color, onClick: () -> Uni
 @Composable
 fun CourseGridScreen(title: String, courses: List<CourseModel>, approvedSheetIds: List<String>, onCourseClick: (CourseModel) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(top = 16.dp)) {
-        Text(text = "$title (${courses.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(horizontal = 16.dp))
+        Text(text = "$title (${courses.size})", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(horizontal = 16.dp))
         Spacer(modifier = Modifier.height(12.dp))
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             itemsIndexed(courses) { _, course -> CourseCardView(course, approvedSheetIds.contains(course.sheetId)) { onCourseClick(course) } }
@@ -494,12 +564,9 @@ fun CourseGridScreen(title: String, courses: List<CourseModel>, approvedSheetIds
 
 @Composable
 fun CourseCardView(course: CourseModel, isUnlocked: Boolean, onClick: () -> Unit) {
-    // Custom Colors extracted from the design
-    val outerBorderColor = Color(0xFF212936)
-    val titleColor = Color(0xFF233876)
-    val orangeButtonColor = Color(0xFFFF8216)
-    val discountBgColor = Color(0xFFD1FAE5)
-    val discountTextColor = Color(0xFF059669)
+    val themePrimaryColor = MaterialTheme.colorScheme.primary
+    val discountBgColor = Color(0xFFE8F5E9)
+    val discountTextColor = Color(0xFF2E7D32)
     
     // Calculate the original fee assuming an 85% discount
     val originalFee = if (course.fee > 0) (course.fee / 0.15).toInt() else 0
@@ -508,135 +575,103 @@ fun CourseCardView(course: CourseModel, isUnlocked: Boolean, onClick: () -> Unit
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp)
-            .clickable { onClick() }
-            .border(10.dp, outerBorderColor, RoundedCornerShape(38.dp)), // Thick phone-like border
-        shape = RoundedCornerShape(38.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 20.dp)
+                .padding(20.dp)
         ) {
-            // 1. Mock Status Bar (Time, Dynamic Island, Signal/Battery)
+            // Top Row: Icon + Duration Tag
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("19:54", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                
-                // Dynamic Island Mockup
                 Box(
                     modifier = Modifier
-                        .width(70.dp)
-                        .height(20.dp)
-                        .background(Color.Black, RoundedCornerShape(50))
-                )
+                        .size(48.dp)
+                        .background(themePrimaryColor.copy(alpha = 0.1f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val iconEmoji = if (course.title.contains("Banking", ignoreCase = true)) "🏦" else if (course.title.contains("TET", ignoreCase = true)) "🏫" else "🎓"
+                    Text(text = iconEmoji, fontSize = 24.sp)
+                }
                 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.SignalCellularAlt, 
-                        contentDescription = "Signal", 
-                        tint = Color(0xFFFDB813), 
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("100%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFDB813))
+                Box(
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text("${course.durationMonths} Months Validity", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
-            // 2. Course Title Row
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 16.dp)
-            ) {
-                // Dynamically change icon based on title keywords
-                val iconEmoji = if (course.title.contains("Banking", ignoreCase = true)) "📘" else "🎓"
-                Text(text = iconEmoji, fontSize = 24.sp)
-                
-                Spacer(modifier = Modifier.width(12.dp))
-                
-                Text(
-                    text = course.title,
-                    color = titleColor,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // Divider
-            Divider(color = Color.LightGray.copy(alpha = 0.3f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 3. Details Box (Fee & Validity)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Color.LightGray.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                    .padding(16.dp)
+            // Course Title
+            Text(
+                text = course.title,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Price & Action Button Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Price Section
                 Column {
-                    // Fee Row
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Fee: ", fontWeight = FontWeight.Bold, color = Color.DarkGray, fontSize = 14.sp)
-                        if (course.fee > 0) {
-                            Text("₹$originalFee ", textDecoration = TextDecoration.LineThrough, color = Color.Gray, fontSize = 14.sp)
-                        }
-                        Text(
-                            text = if (course.fee > 0) "₹${course.fee.toInt()}" else "FREE", 
-                            fontWeight = FontWeight.ExtraBold, 
-                            color = Color.Black, 
-                            fontSize = 16.sp
-                        )
-                        
-                        if (course.fee > 0) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            // Discount Tag
+                    if (course.fee > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("₹$originalFee", textDecoration = TextDecoration.LineThrough, color = Color.Gray, fontSize = 12.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
                             Box(
                                 modifier = Modifier
-                                    .background(discountBgColor, RoundedCornerShape(50))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .background(discountBgColor, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text("85% OFF", color = discountTextColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("85% OFF", color = discountTextColor, fontSize = 10.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // Validity Row
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Validity: ", fontWeight = FontWeight.Bold, color = Color.DarkGray, fontSize = 14.sp)
-                        Text("${course.durationMonths} Months", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    }
+                    Text(
+                        text = if (course.fee > 0) "₹${course.fee.toInt()}" else "FREE",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = themePrimaryColor,
+                        fontSize = 24.sp
+                    )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 4. Action Button
-            Button(
-                onClick = onClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isUnlocked) Color(0xFF4CAF50) else orangeButtonColor
-                ),
-                shape = RoundedCornerShape(50)
-            ) {
-                Text(
-                    text = if (isUnlocked) "Open Course" else "Enroll Now", 
-                    fontWeight = FontWeight.Bold, 
-                    fontSize = 16.sp, 
-                    color = Color.White
-                )
+                // CTA Button
+                Button(
+                    onClick = onClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isUnlocked) Color(0xFF4CAF50) else themePrimaryColor
+                    ),
+                    shape = RoundedCornerShape(50),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = if (isUnlocked) "Open Course" else "Enroll Now", 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 14.sp, 
+                        color = Color.White
+                    )
+                }
             }
         }
     }
