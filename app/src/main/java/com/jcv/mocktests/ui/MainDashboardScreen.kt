@@ -32,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -54,7 +55,8 @@ enum class BottomTab { HOME, PRO_COURSES, PURCHASED_COURSES, STUDY_MATERIAL }
 
 private val PastelColors = listOf(
     Color(0xFFE3F2FD), Color(0xFFF3E5F5), Color(0xFFE8F5E9), 
-    Color(0xFFFFF3E0), Color(0xFFFFEBEE), Color(0xFFE0F7FA)  
+    Color(0xFFFFF3E0), Color(0xFFFFEBEE), Color(0xFFE0F7FA),
+    Color(0xFFFCE4EC), Color(0xFFF0F4C3), Color(0xFFD7CCC8)
 )
 
 data class CourseModel(
@@ -100,6 +102,8 @@ fun MainDashboardScreen(
     var isLoading by remember { mutableStateOf(true) }
     var streakCount by remember { mutableIntStateOf(0) }
     var showExitDialog by remember { mutableStateOf(false) }
+
+    val userEmail = auth.currentUser?.email ?: "student@jcv.com"
 
     BackHandler(enabled = true) {
         if (drawerState.isOpen) scope.launch { drawerState.close() }
@@ -162,129 +166,163 @@ fun MainDashboardScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = false, 
-        drawerContent = {
-            ModalDrawerSheet(modifier = Modifier.width(300.dp), drawerContainerColor = MaterialTheme.colorScheme.surface) {
-                Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-                    Row(modifier = Modifier.fillMaxWidth().background(primaryGradient).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.AccountCircle, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(40.dp))
+    Box(modifier = Modifier.fillMaxSize()) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = false, 
+            drawerContent = {
+                ModalDrawerSheet(modifier = Modifier.width(300.dp), drawerContainerColor = MaterialTheme.colorScheme.surface) {
+                    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                        Row(modifier = Modifier.fillMaxWidth().background(primaryGradient).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AccountCircle, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(40.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("JCV HUB", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            }
+                            IconButton(onClick = { scope.launch { drawerState.close() } }) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White) }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = themePrimaryColor) },
+                            label = { Text("Home Dashboard", fontWeight = FontWeight.Bold) },
+                            selected = selectedTab == BottomTab.HOME,
+                            onClick = { selectedTab = BottomTab.HOME; scope.launch { drawerState.close() } },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                        )
+
+                        Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+
+                        if (purchasedCourses.isNotEmpty()) {
+                            DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
+                            purchasedCourses.forEach { course -> DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) } }
+                        }
+
+                        if (proCourses.isNotEmpty()) {
+                            DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
+                            proCourses.forEach { course -> DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) } }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+                        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                        
+                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Person, contentDescription = "User", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text("JCV HUB", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            Column {
+                                Text(auth.currentUser?.displayName ?: "User Name", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(userEmail, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                        IconButton(onClick = { scope.launch { drawerState.close() } }) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White) }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = themePrimaryColor) },
-                        label = { Text("Home Dashboard", fontWeight = FontWeight.Bold) },
-                        selected = selectedTab == BottomTab.HOME,
-                        onClick = { selectedTab = BottomTab.HOME; scope.launch { drawerState.close() } },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
-                    )
-
-                    Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant)
-
-                    if (purchasedCourses.isNotEmpty()) {
-                        DrawerSectionHeader("PURCHASED COURSES", Icons.Default.List, Color(0xFF9C27B0))
-                        purchasedCourses.forEach { course -> DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) } }
-                    }
-
-                    if (proCourses.isNotEmpty()) {
-                        DrawerSectionHeader("PRO COURSES", Icons.Default.Star, Color(0xFFFF9800))
-                        proCourses.forEach { course -> DrawerCourseItem(course.title) { onNavigateToCourse(course.sheetId) } }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-                    Divider(color = MaterialTheme.colorScheme.surfaceVariant)
-                    
-                    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Person, contentDescription = "User", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(auth.currentUser?.displayName ?: "User Name", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                            Text(auth.currentUser?.email ?: "user@jcv.com", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        
+                        OutlinedButton(
+                            onClick = { auth.signOut(); onNavigateToLogin() },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            shape = RoundedCornerShape(50),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE53935))
+                        ) {
+                            Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Logout")
                         }
                     }
-                    
-                    OutlinedButton(
-                        onClick = { auth.signOut(); onNavigateToLogin() },
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE53935))
+                }
+            }
+        ) {
+            Scaffold(
+                topBar = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(primaryGradient)
                     ) {
-                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Logout")
+                        TopAppBar(
+                            title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
+                            navigationIcon = {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) }
+                            },
+                            actions = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .padding(end = 16.dp)
+                                        .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50))
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("🔥", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                        )
+                    }
+                },
+                bottomBar = {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface, 
+                        contentColor = MaterialTheme.colorScheme.onSurface, 
+                        tonalElevation = 8.dp
+                    ) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Home") }, label = { Text("Home", fontSize = 10.sp) },
+                            selected = selectedTab == BottomTab.HOME, onClick = { selectedTab = BottomTab.HOME }, colors = navColors(isDarkMode)
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Star, contentDescription = "Pro Courses") }, label = { Text("Pro", fontSize = 10.sp) },
+                            selected = selectedTab == BottomTab.PRO_COURSES, onClick = { selectedTab = BottomTab.PRO_COURSES }, colors = navColors(isDarkMode)
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.List, contentDescription = "Purchased") }, label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
+                            selected = selectedTab == BottomTab.PURCHASED_COURSES, onClick = { if (auth.currentUser == null) onNavigateToLogin() else selectedTab = BottomTab.PURCHASED_COURSES }, colors = navColors(isDarkMode)
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Info, contentDescription = "Study") }, label = { Text("Study", fontSize = 10.sp) },
+                            selected = selectedTab == BottomTab.STUDY_MATERIAL, onClick = { selectedTab = BottomTab.STUDY_MATERIAL }, colors = navColors(isDarkMode)
+                        )
+                    }
+                }
+            ) { paddingValues ->
+                Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(MaterialTheme.colorScheme.background)) { 
+                    when (selectedTab) {
+                        BottomTab.HOME -> DashboardHomeContent(allCourses, purchasedCourses, proCourses, approvedSheetIds, auth, isLoading, isDarkMode) { onNavigateToCourse(it.sheetId) }
+                        BottomTab.PRO_COURSES -> if (isLoading && proCourses.isEmpty()) LoadingLogo(themePrimaryColor) else CourseGridScreen("Pro Courses", proCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
+                        BottomTab.PURCHASED_COURSES -> if (isLoading && purchasedCourses.isEmpty()) LoadingLogo(themePrimaryColor) else CourseGridScreen("Purchased Courses", purchasedCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
+                        BottomTab.STUDY_MATERIAL -> LocalStudyMaterialScreen() 
                     }
                 }
             }
         }
+        
+        // 🔹 OVERLAY WATERMARK EVERYWHERE
+        GlobalWatermark(email = userEmail)
+    }
+}
+
+@Composable
+fun GlobalWatermark(email: String) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.SpaceEvenly,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Scaffold(
-            topBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(primaryGradient)
-                ) {
-                    TopAppBar(
-                        title = { Text("JCV MOCK TESTS", color = Color.White, fontWeight = FontWeight.Bold) },
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White) }
-                        },
-                        actions = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .padding(end = 16.dp)
-                                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(50))
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text("🔥", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("$streakCount", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+        repeat(8) { row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(x = if (row % 2 == 0) (-30).dp else 30.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                repeat(3) {
+                    Text(
+                        text = "JCV MOCK TESTS\n$email",
+                        color = Color.Gray.copy(alpha = 0.12f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.rotate(-30f)
                     )
-                }
-            },
-            bottomBar = {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface, 
-                    contentColor = MaterialTheme.colorScheme.onSurface, 
-                    tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") }, label = { Text("Home", fontSize = 10.sp) },
-                        selected = selectedTab == BottomTab.HOME, onClick = { selectedTab = BottomTab.HOME }, colors = navColors(isDarkMode)
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Star, contentDescription = "Pro Courses") }, label = { Text("Pro", fontSize = 10.sp) },
-                        selected = selectedTab == BottomTab.PRO_COURSES, onClick = { selectedTab = BottomTab.PRO_COURSES }, colors = navColors(isDarkMode)
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.List, contentDescription = "Purchased") }, label = { Text("Purchased", fontSize = 10.sp, maxLines = 1) },
-                        selected = selectedTab == BottomTab.PURCHASED_COURSES, onClick = { if (auth.currentUser == null) onNavigateToLogin() else selectedTab = BottomTab.PURCHASED_COURSES }, colors = navColors(isDarkMode)
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Info, contentDescription = "Study") }, label = { Text("Study", fontSize = 10.sp) },
-                        selected = selectedTab == BottomTab.STUDY_MATERIAL, onClick = { selectedTab = BottomTab.STUDY_MATERIAL }, colors = navColors(isDarkMode)
-                    )
-                }
-            }
-        ) { paddingValues ->
-            Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(MaterialTheme.colorScheme.background)) { 
-                when (selectedTab) {
-                    BottomTab.HOME -> DashboardHomeContent(allCourses, purchasedCourses, proCourses, approvedSheetIds, auth, isLoading, isDarkMode) { onNavigateToCourse(it.sheetId) }
-                    BottomTab.PRO_COURSES -> if (isLoading && proCourses.isEmpty()) LoadingLogo(themePrimaryColor) else CourseGridScreen("Pro Courses", proCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
-                    BottomTab.PURCHASED_COURSES -> if (isLoading && purchasedCourses.isEmpty()) LoadingLogo(themePrimaryColor) else CourseGridScreen("Purchased Courses", purchasedCourses, approvedSheetIds) { onNavigateToCourse(it.sheetId) }
-                    BottomTab.STUDY_MATERIAL -> LocalStudyMaterialScreen() 
                 }
             }
         }
@@ -408,7 +446,12 @@ fun DashboardHomeContent(
 ) {
     val themePrimaryColor = MaterialTheme.colorScheme.primary
     var selectedCategory by remember { mutableStateOf<String?>(null) }
-    val homeCategories = listOf("Pro Courses", "Purchased", "AP TET", "APPSC", "IIT JEE MAINS", "AP EAPCET")
+    
+    // 🔹 Updated Categories List
+    val homeCategories = listOf(
+        "Pro Courses", "Purchased", "AP TET", "AP DSC", 
+        "APPSC", "BANKING", "IIT JEE MAINS", "AP EAPCET", "IIT and NEET Foundation"
+    )
 
     if (selectedCategory == null) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 20.dp)) {
@@ -456,9 +499,12 @@ fun DashboardHomeContent(
             when (selectedCategory) {
                 "Pro Courses" -> proCourses; "Purchased" -> purchasedCourses
                 "AP TET" -> allCourses.filter { it.title.contains("TET", ignoreCase = true) }
+                "AP DSC" -> allCourses.filter { it.title.contains("DSC", ignoreCase = true) }
                 "APPSC" -> allCourses.filter { it.title.contains("APPSC", ignoreCase = true) || it.title.contains("GROUP", ignoreCase = true) }
+                "BANKING" -> allCourses.filter { it.title.contains("Bank", ignoreCase = true) }
                 "IIT JEE MAINS" -> allCourses.filter { it.title.contains("IIT", ignoreCase = true) || it.title.contains("JEE", ignoreCase = true) }
                 "AP EAPCET" -> allCourses.filter { it.title.contains("EAPCET", ignoreCase = true) }
+                "IIT and NEET Foundation" -> allCourses.filter { it.title.contains("Foundation", ignoreCase = true) || (it.title.contains("IIT", true) && it.title.contains("NEET", true)) }
                 else -> emptyList()
             }
         }
@@ -586,21 +632,20 @@ fun CourseCardView(course: CourseModel, isUnlocked: Boolean, onClick: () -> Unit
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            // Top Row: Icon + Duration Tag
+            // 🔹 Top Row: App Logo + Duration Tag
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
+                Image(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = "Course Logo",
                     modifier = Modifier
                         .size(48.dp)
-                        .background(themePrimaryColor.copy(alpha = 0.1f), RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val iconEmoji = if (course.title.contains("Banking", ignoreCase = true)) "🏦" else if (course.title.contains("TET", ignoreCase = true)) "🏫" else "🎓"
-                    Text(text = iconEmoji, fontSize = 24.sp)
-                }
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp))
+                )
                 
                 Box(
                     modifier = Modifier
@@ -674,12 +719,5 @@ fun CourseCardView(course: CourseModel, isUnlocked: Boolean, onClick: () -> Unit
                 }
             }
         }
-    }
-}
-
-@Composable
-fun CourseTag(text: String) {
-    Box(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-        Text(text = text, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
     }
 }
