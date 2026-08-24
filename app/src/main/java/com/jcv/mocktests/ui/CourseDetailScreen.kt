@@ -41,6 +41,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -119,6 +120,7 @@ fun CourseDetailScreen(
     val localStorage = remember { LocalStorage(context) }
     val examPrefs = remember { context.getSharedPreferences("JcvExamPrefs", Context.MODE_PRIVATE) } 
     val auth = remember { FirebaseAuth.getInstance() }
+    val userEmail = auth.currentUser?.email ?: "student@jcv.com"
     
     // Live Network State
     val isConnected by rememberNetworkConnectivity(context)
@@ -303,657 +305,657 @@ fun CourseDetailScreen(
     }
 
     // ==========================================
-    // WEBVIEW WITH FULL MEDIA CONTROLS & OFFLINE SUPPORT
+    // ROOT BOX WRAPPER FOR WATERMARK
     // ==========================================
-    if (showStudyMaterialWebView) {
-        var canGoBack by remember { mutableStateOf(false) }
-
-        // Media Player States
-        var ttsState by remember { mutableStateOf(TtsState.STOPPED) }
-        var ttsChunks by remember { mutableStateOf<List<String>>(emptyList()) }
-        var currentChunkIndex by remember { mutableIntStateOf(0) }
+    Box(modifier = Modifier.fillMaxSize()) {
         
-        var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-        val mainHandler = remember { Handler(Looper.getMainLooper()) }
-
-        fun playCurrentChunk() {
-            if (ttsChunks.isNotEmpty() && currentChunkIndex in ttsChunks.indices) {
-                val rawText = ttsChunks[currentChunkIndex]
-                val cleanText = rawText
-                    .replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "") 
-                    .replace(Regex("[📄📁🔖📑⭐🎓🔥✓❌]"), "") 
-                
-                ttsState = TtsState.PLAYING
-                tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "TTS_CHUNK_$currentChunkIndex")
-                webViewRef?.evaluateJavascript("if(window.highlightChunk) window.highlightChunk($currentChunkIndex);", null)
-            }
-        }
-
-        DisposableEffect(context) {
-            val textToSpeech = TextToSpeech(context) { status ->
-                if (status == TextToSpeech.SUCCESS) tts?.language = Locale("te", "IN") 
-            }
+        if (showStudyMaterialWebView) {
+            var canGoBack by remember { mutableStateOf(false) }
+            var ttsState by remember { mutableStateOf(TtsState.STOPPED) }
+            var ttsChunks by remember { mutableStateOf<List<String>>(emptyList()) }
+            var currentChunkIndex by remember { mutableIntStateOf(0) }
             
-            textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {}
-                override fun onDone(utteranceId: String?) {
-                    mainHandler.post { 
-                        if (ttsState == TtsState.PLAYING) {
-                            if (currentChunkIndex < ttsChunks.size - 1) {
-                                currentChunkIndex++
-                                playCurrentChunk()
-                            } else {
-                                ttsState = TtsState.STOPPED
-                                webViewRef?.evaluateJavascript("if(window.clearHighlight) window.clearHighlight();", null)
+            var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+            val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+            fun playCurrentChunk() {
+                if (ttsChunks.isNotEmpty() && currentChunkIndex in ttsChunks.indices) {
+                    val rawText = ttsChunks[currentChunkIndex]
+                    val cleanText = rawText
+                        .replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "") 
+                        .replace(Regex("[📄📁🔖📑⭐🎓🔥✓❌]"), "") 
+                    
+                    ttsState = TtsState.PLAYING
+                    tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "TTS_CHUNK_$currentChunkIndex")
+                    webViewRef?.evaluateJavascript("if(window.highlightChunk) window.highlightChunk($currentChunkIndex);", null)
+                }
+            }
+
+            DisposableEffect(context) {
+                val textToSpeech = TextToSpeech(context) { status ->
+                    if (status == TextToSpeech.SUCCESS) tts?.language = Locale("te", "IN") 
+                }
+                
+                textToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {
+                        mainHandler.post { 
+                            if (ttsState == TtsState.PLAYING) {
+                                if (currentChunkIndex < ttsChunks.size - 1) {
+                                    currentChunkIndex++
+                                    playCurrentChunk()
+                                } else {
+                                    ttsState = TtsState.STOPPED
+                                    webViewRef?.evaluateJavascript("if(window.clearHighlight) window.clearHighlight();", null)
+                                }
                             }
                         }
                     }
-                }
-                override fun onError(utteranceId: String?) {
-                    mainHandler.post { ttsState = TtsState.STOPPED }
-                }
-            })
-            tts = textToSpeech
+                    override fun onError(utteranceId: String?) {
+                        mainHandler.post { ttsState = TtsState.STOPPED }
+                    }
+                })
+                tts = textToSpeech
 
-            onDispose {
-                textToSpeech.stop()
-                textToSpeech.shutdown()
+                onDispose {
+                    textToSpeech.stop()
+                    textToSpeech.shutdown()
+                }
             }
-        }
 
-        fun stopAllSpeech() {
-            tts?.stop()
-            ttsState = TtsState.STOPPED
-            webViewRef?.evaluateJavascript("if(window.clearHighlight) window.clearHighlight();", null)
-        }
+            fun stopAllSpeech() {
+                tts?.stop()
+                ttsState = TtsState.STOPPED
+                webViewRef?.evaluateJavascript("if(window.clearHighlight) window.clearHighlight();", null)
+            }
 
-        BackHandler {
-            stopAllSpeech()
-            if (canGoBack && !webViewError) webViewRef?.goBack() else showStudyMaterialWebView = false
-        }
+            BackHandler {
+                stopAllSpeech()
+                if (canGoBack && !webViewError) webViewRef?.goBack() else showStudyMaterialWebView = false
+            }
 
-        Scaffold(
-            topBar = {
-                Box(
-                    modifier = Modifier.fillMaxWidth().background(primaryGradient)
-                ) {
-                    TopAppBar(
-                        title = { 
-                            if (ttsState == TtsState.STOPPED) {
-                                Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) 
-                            } else {
-                                Text("Reading ${currentChunkIndex + 1} of ${ttsChunks.size}", color = Color.White, fontSize = 14.sp)
-                            }
-                        },
-                        navigationIcon = { 
-                            if (ttsState == TtsState.STOPPED) {
-                                IconButton(onClick = { 
-                                    if (canGoBack && !webViewError) webViewRef?.goBack() else showStudyMaterialWebView = false 
-                                }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
-                            } else {
-                                IconButton(onClick = { stopAllSpeech() }) { 
-                                    Icon(Icons.Default.Close, contentDescription = "Stop", tint = Color.White) 
+            Scaffold(
+                topBar = {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().background(primaryGradient)
+                    ) {
+                        TopAppBar(
+                            title = { 
+                                if (ttsState == TtsState.STOPPED) {
+                                    Text(courseTitle, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) 
+                                } else {
+                                    Text("Reading ${currentChunkIndex + 1} of ${ttsChunks.size}", color = Color.White, fontSize = 14.sp)
                                 }
-                            }
-                        },
-                        actions = {
-                            if (ttsState == TtsState.STOPPED && !webViewError) {
-                                IconButton(onClick = {
-                                    Toast.makeText(context, "Extracting text...", Toast.LENGTH_SHORT).show()
-                                    val js = """
-                                        var chunks = document.querySelectorAll('.tts-chunk');
-                                        var textArray = [];
-                                        if (chunks.length > 0) {
-                                            chunks.forEach(function(c, i) { 
-                                                textArray.push(c.getAttribute('data-speak') || c.innerText); 
-                                            });
-                                        } else {
-                                            textArray.push(document.body.innerText);
-                                        }
-                                        
-                                        window.highlightChunk = function(index) {
-                                            var c = document.querySelectorAll('.tts-chunk');
-                                            c.forEach(el => el.classList.remove('tts-highlight'));
-                                            if(c[index]) {
-                                                c[index].classList.add('tts-highlight');
-                                                var y = c[index].getBoundingClientRect().top + window.pageYOffset - 120;
-                                                window.scrollTo({top: y, behavior: 'smooth'});
-                                            }
-                                        };
-                                        window.clearHighlight = function() {
-                                            var c = document.querySelectorAll('.tts-chunk');
-                                            c.forEach(el => el.classList.remove('tts-highlight'));
-                                        };
-
-                                        window.AndroidTTS.receiveChunks(JSON.stringify(textArray));
-                                    """.trimIndent()
-                                    webViewRef?.evaluateJavascript(js, null)
-                                }) {
-                                    Icon(Icons.Default.VolumeUp, contentDescription = "Read Aloud", tint = Color.White)
-                                }
-                            } else if (!webViewError) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { 
-                                            if (currentChunkIndex > 0) {
-                                                tts?.stop()
-                                                currentChunkIndex--
-                                                playCurrentChunk()
-                                            }
-                                        },
-                                        enabled = currentChunkIndex > 0
-                                    ) { Icon(Icons.Default.SkipPrevious, "Previous", tint = if (currentChunkIndex > 0) Color.White else Color.White.copy(alpha=0.3f)) }
-
+                            },
+                            navigationIcon = { 
+                                if (ttsState == TtsState.STOPPED) {
                                     IconButton(onClick = { 
-                                        if (ttsState == TtsState.PLAYING) {
-                                            tts?.stop()
-                                            ttsState = TtsState.PAUSED
-                                        } else {
-                                            playCurrentChunk()
-                                        }
-                                    }) { 
-                                        Icon(if (ttsState == TtsState.PLAYING) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", tint = Color.White) 
+                                        if (canGoBack && !webViewError) webViewRef?.goBack() else showStudyMaterialWebView = false 
+                                    }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
+                                } else {
+                                    IconButton(onClick = { stopAllSpeech() }) { 
+                                        Icon(Icons.Default.Close, contentDescription = "Stop", tint = Color.White) 
                                     }
+                                }
+                            },
+                            actions = {
+                                if (ttsState == TtsState.STOPPED && !webViewError) {
+                                    IconButton(onClick = {
+                                        Toast.makeText(context, "Extracting text...", Toast.LENGTH_SHORT).show()
+                                        val js = """
+                                            var chunks = document.querySelectorAll('.tts-chunk');
+                                            var textArray = [];
+                                            if (chunks.length > 0) {
+                                                chunks.forEach(function(c, i) { 
+                                                    textArray.push(c.getAttribute('data-speak') || c.innerText); 
+                                                });
+                                            } else {
+                                                textArray.push(document.body.innerText);
+                                            }
+                                            
+                                            window.highlightChunk = function(index) {
+                                                var c = document.querySelectorAll('.tts-chunk');
+                                                c.forEach(el => el.classList.remove('tts-highlight'));
+                                                if(c[index]) {
+                                                    c[index].classList.add('tts-highlight');
+                                                    var y = c[index].getBoundingClientRect().top + window.pageYOffset - 120;
+                                                    window.scrollTo({top: y, behavior: 'smooth'});
+                                                }
+                                            };
+                                            window.clearHighlight = function() {
+                                                var c = document.querySelectorAll('.tts-chunk');
+                                                c.forEach(el => el.classList.remove('tts-highlight'));
+                                            };
 
-                                    IconButton(
-                                        onClick = { 
-                                            if (currentChunkIndex < ttsChunks.size - 1) {
+                                            window.AndroidTTS.receiveChunks(JSON.stringify(textArray));
+                                        """.trimIndent()
+                                        webViewRef?.evaluateJavascript(js, null)
+                                    }) {
+                                        Icon(Icons.Default.VolumeUp, contentDescription = "Read Aloud", tint = Color.White)
+                                    }
+                                } else if (!webViewError) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = { 
+                                                if (currentChunkIndex > 0) {
+                                                    tts?.stop()
+                                                    currentChunkIndex--
+                                                    playCurrentChunk()
+                                                }
+                                            },
+                                            enabled = currentChunkIndex > 0
+                                        ) { Icon(Icons.Default.SkipPrevious, "Previous", tint = if (currentChunkIndex > 0) Color.White else Color.White.copy(alpha=0.3f)) }
+
+                                        IconButton(onClick = { 
+                                            if (ttsState == TtsState.PLAYING) {
                                                 tts?.stop()
-                                                currentChunkIndex++
+                                                ttsState = TtsState.PAUSED
+                                            } else {
                                                 playCurrentChunk()
                                             }
-                                        },
-                                        enabled = currentChunkIndex < ttsChunks.size - 1
-                                    ) { Icon(Icons.Default.SkipNext, "Next", tint = if (currentChunkIndex < ttsChunks.size - 1) Color.White else Color.White.copy(alpha=0.3f)) }
+                                        }) { 
+                                            Icon(if (ttsState == TtsState.PLAYING) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", tint = Color.White) 
+                                        }
+
+                                        IconButton(
+                                            onClick = { 
+                                                if (currentChunkIndex < ttsChunks.size - 1) {
+                                                    tts?.stop()
+                                                    currentChunkIndex++
+                                                    playCurrentChunk()
+                                                }
+                                            },
+                                            enabled = currentChunkIndex < ttsChunks.size - 1
+                                        ) { Icon(Icons.Default.SkipNext, "Next", tint = if (currentChunkIndex < ttsChunks.size - 1) Color.White else Color.White.copy(alpha=0.3f)) }
+                                    }
                                 }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                    )
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                        )
+                    }
                 }
-            }
-        ) { padding ->
-            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        WebView(ctx).apply {
-                            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                            
-                            webViewClient = object : WebViewClient() {
-                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                                    super.doUpdateVisitedHistory(view, url, isReload)
-                                    canGoBack = view?.canGoBack() == true
-                                }
+            ) { padding ->
+                Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                                
+                                webViewClient = object : WebViewClient() {
+                                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                        super.doUpdateVisitedHistory(view, url, isReload)
+                                        canGoBack = view?.canGoBack() == true
+                                    }
 
-                                override fun onReceivedError(
-                                    view: WebView?,
-                                    request: WebResourceRequest?,
-                                    error: WebResourceError?
-                                ) {
-                                    super.onReceivedError(view, request, error)
-                                    if (request?.isForMainFrame == true) {
-                                        webViewError = true
-                                        view?.loadUrl("about:blank")
+                                    override fun onReceivedError(
+                                        view: WebView?,
+                                        request: WebResourceRequest?,
+                                        error: WebResourceError?
+                                    ) {
+                                        super.onReceivedError(view, request, error)
+                                        if (request?.isForMainFrame == true) {
+                                            webViewError = true
+                                            view?.loadUrl("about:blank")
+                                        }
                                     }
                                 }
-                            }
-                            webChromeClient = WebChromeClient() 
+                                webChromeClient = WebChromeClient() 
 
-                            settings.apply {
-                                javaScriptEnabled = true
-                                domStorageEnabled = true
-                                databaseEnabled = true
-                                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                cacheMode = if (isConnected) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
-                            }
-                            
-                            addJavascriptInterface(WebAppInterface { jsonChunks ->
-                                mainHandler.post {
-                                    try {
-                                        val jsonArray = JSONArray(jsonChunks)
-                                        val extractedChunks = mutableListOf<String>()
-                                        for (i in 0 until jsonArray.length()) {
-                                            extractedChunks.add(jsonArray.getString(i))
-                                        }
-                                        
-                                        if (extractedChunks.isNotEmpty()) {
-                                            ttsChunks = extractedChunks
-                                            currentChunkIndex = 0
-                                            playCurrentChunk()
-                                        } else {
-                                            Toast.makeText(context, "No text found.", Toast.LENGTH_SHORT).show()
-                                        }
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "Error extracting text.", Toast.LENGTH_SHORT).show()
-                                    }
+                                settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    databaseEnabled = true
+                                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                    cacheMode = if (isConnected) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
                                 }
-                            }, "AndroidTTS")
-                            
-                            loadUrl(studyMaterialUrl)
-                            webViewRef = this
+                                
+                                addJavascriptInterface(WebAppInterface { jsonChunks ->
+                                    mainHandler.post {
+                                        try {
+                                            val jsonArray = JSONArray(jsonChunks)
+                                            val extractedChunks = mutableListOf<String>()
+                                            for (i in 0 until jsonArray.length()) {
+                                                extractedChunks.add(jsonArray.getString(i))
+                                            }
+                                            
+                                            if (extractedChunks.isNotEmpty()) {
+                                                ttsChunks = extractedChunks
+                                                currentChunkIndex = 0
+                                                playCurrentChunk()
+                                            } else {
+                                                Toast.makeText(context, "No text found.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Error extracting text.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }, "AndroidTTS")
+                                
+                                loadUrl(studyMaterialUrl)
+                                webViewRef = this
+                            }
+                        }
+                    )
+
+                    if (webViewError) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.WifiOff, contentDescription = "No Internet", modifier = Modifier.size(64.dp), tint = Color.Gray)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("No Internet Connection", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Waiting for network to reload...", color = Color.Gray, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(24.dp))
+                                CircularProgressIndicator(color = themePrimaryColor, modifier = Modifier.size(24.dp))
+                            }
                         }
                     }
-                )
-
-                if (webViewError) {
+                }
+            }
+        } else {
+            // MAIN COURSE DETAILS SCAFFOLD
+            Scaffold(
+                topBar = {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .background(primaryGradient)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.WifiOff, contentDescription = "No Internet", modifier = Modifier.size(64.dp), tint = Color.Gray)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("No Internet Connection", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
+                        TopAppBar(
+                            title = { Text("Course Details", color = Color.White) },
+                            navigationIcon = { 
+                                IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                        )
+                    }
+                }
+            ) { padding ->
+                Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+                    TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTab == index, onClick = { selectedTab = index },
+                                text = { Text(text = title, color = if (selectedTab == index) themePrimaryColor else Color.Gray, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
+                            )
+                        }
+                    }
+
+                    if (selectedTab == 0) {
+                        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                            Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Waiting for network to reload...", color = Color.Gray, fontSize = 14.sp)
+                            Text("Comprehensive mock tests and materials designed to help you prepare and excel.", color = Color.Gray)
                             Spacer(modifier = Modifier.height(24.dp))
-                            CircularProgressIndicator(color = themePrimaryColor, modifier = Modifier.size(24.dp))
-                        }
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    // MAIN COURSE DETAILS SCAFFOLD
-    Scaffold(
-        topBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(primaryGradient)
-            ) {
-                TopAppBar(
-                    title = { Text("Course Details", color = Color.White) },
-                    navigationIcon = { 
-                        IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White) }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            }
-        }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            TabRow(selectedTabIndex = selectedTab, contentColor = themePrimaryColor, containerColor = MaterialTheme.colorScheme.surface) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index, onClick = { selectedTab = index },
-                        text = { Text(text = title, color = if (selectedTab == index) themePrimaryColor else Color.Gray, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) }
-                    )
-                }
-            }
-
-            if (selectedTab == 0) {
-                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                    Text("About this Course", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Comprehensive mock tests and materials designed to help you prepare and excel.", color = Color.Gray)
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    val totalQs = tests.sumOf { it.questionCount }
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Card(modifier = Modifier.weight(1f).padding(end = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
-                            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("${tests.size}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = themePrimaryColor)
-                                Text("Total Tests", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        Card(modifier = Modifier.weight(1f).padding(start = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
-                            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("$totalQs", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = themePrimaryColor)
-                                Text("Total Questions", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    var attemptedCount = 0
-                    var totalAchievedScore = 0f
-                    var totalPossibleScore = 0f
-
-                    tests.forEach { test ->
-                        if (localStorage.isTestAttempted(courseId, test.name)) {
-                            attemptedCount++
-                            val score = localStorage.getTestScore(courseId, test.name)
-                            if (score != null) {
-                                totalAchievedScore += score.first
-                                totalPossibleScore += score.second
-                            }
-                        }
-                    }
-
-                    if (attemptedCount > 0) {
-                        val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
-                        val accuracy = if (totalPossibleScore > 0) ((totalAchievedScore / totalPossibleScore) * 100).toInt() else 0
-                        val accuracyColor = if (accuracy >= 70) Color(0xFF2E7D32) else if (accuracy >= 40) Color(0xFFE67E22) else Color(0xFFC62828)
-
-                        Text("Your Performance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(2.dp),
-                            shape = RoundedCornerShape(24.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Tests Completed", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
-                                    Text("$attemptedCount / ${tests.size}", fontWeight = FontWeight.Black, color = themePrimaryColor, fontSize = 14.sp)
-                                }
-                                Spacer(modifier = Modifier.height(10.dp))
-                                LinearProgressIndicator(
-                                    progress = attemptedCount.toFloat() / tests.size.coerceAtLeast(1).toFloat(),
-                                    modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
-                                    color = themePrimaryColor,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                                
-                                Spacer(modifier = Modifier.height(20.dp))
-                                Divider(color = MaterialTheme.colorScheme.surfaceVariant)
-                                Spacer(modifier = Modifier.height(20.dp))
-                                
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Overall Score", fontSize = 12.sp, color = Color.Gray)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text("${formatScore(totalAchievedScore)} / ${formatScore(totalPossibleScore)}", fontSize = 22.sp, fontWeight = FontWeight.Black, color = themePrimaryColor)
-                                    }
-                                    Divider(modifier = Modifier.height(40.dp).width(1.dp), color = MaterialTheme.colorScheme.surfaceVariant)
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Accuracy", fontSize = 12.sp, color = Color.Gray)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text("$accuracy%", fontSize = 22.sp, fontWeight = FontWeight.Black, color = accuracyColor)
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(24.dp))
-                    }
-
-                    if (paymentStatus == "approved") {
-                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
-                            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = "Active", tint = Color(0xFF4CAF50), modifier = Modifier.size(32.dp))
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column {
-                                    Text(text = "Course Unlocked", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    if (subscriptionExpiry != null) Text(text = "Valid until ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(subscriptionExpiry!!)}", color = Color(0xFF388E3C), fontSize = 13.sp)
-                                }
-                            }
-                        }
-                    } else {
-                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, themePrimaryColor), shape = RoundedCornerShape(24.dp)) {
-                            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Column {
-                                    Text("Subscription Validity", fontSize = 12.sp, color = Color.Gray)
-                                    Text("$courseDuration Months Access", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                                }
-                                Text("₹${courseFee.toInt()}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = themePrimaryColor)
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-                        OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)) {
-                            Text("View Course Content", fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(24.dp)) 
-                    }
-                }
-            } else {
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
-                    if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = themePrimaryColor) }
-                    } else if (paymentStatus != "approved") {
-                        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                            Spacer(modifier = Modifier.height(40.dp))
-                            Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size(64.dp), tint = Color.LightGray)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(text = if (paymentStatus == "expired") "Subscription Expired" else "Course Locked", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                            Spacer(modifier = Modifier.height(8.dp))
                             
-                            if (paymentStatus == "pending") {
-                                Text("Your payment is currently under review by the admin. Please check back later.", color = Color(0xFFE67E22), textAlign = TextAlign.Center)
-                            } else {
-                                Text(text = if (paymentStatus == "expired") "Your access has ended. Renew your subscription for $courseDuration Months to regain access." else "Unlock this course for $courseDuration Months to access all ${tests.size} premium mock tests.", color = Color.Gray, textAlign = TextAlign.Center)
-                                Spacer(modifier = Modifier.height(32.dp))
-                                
-                                if (paymentStatus == "rejected") {
-                                    Text("Your previous payment was rejected. Please try again or contact the admin.", color = Color.Red, fontSize = 12.sp, textAlign = TextAlign.Center)
-                                    Spacer(modifier = Modifier.height(8.dp))
+                            val totalQs = tests.sumOf { it.questionCount }
+                            
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Card(modifier = Modifier.weight(1f).padding(end = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
+                                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("${tests.size}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = themePrimaryColor)
+                                        Text("Total Tests", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
-                                
-                                Button(
-                                    onClick = { showPaymentDialog = true }, modifier = Modifier.fillMaxWidth().height(55.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), shape = RoundedCornerShape(50)
-                                ) {
-                                    Text(text = if (courseFee > 0) { if (paymentStatus == "expired") "RENEW FOR ₹${courseFee.toInt()}" else "PAY ₹${courseFee.toInt()} FOR $courseDuration MONTHS" } else "UNLOCK COURSE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Card(modifier = Modifier.weight(1f).padding(start = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(0.dp)) {
+                                    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("$totalQs", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = themePrimaryColor)
+                                        Text("Total Questions", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             }
-                        }
-                    } else {
-                        if (selectedTab == 1) {
-                            if (tests.isEmpty() && studyMaterialUrl.isBlank()) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
-                                    Text("No content found for this course yet.", color = Color.Gray) 
-                                }
-                            } else if (currentContentFolder == null) {
-                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                                    if (subscriptionExpiry != null) {
-                                        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
-                                            Text(text = "Active Subscription: Valid until ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(subscriptionExpiry!!)}", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp).fillMaxWidth(), fontSize = 13.sp)
-                                        }
-                                    }
+                            
+                            Spacer(modifier = Modifier.height(24.dp))
 
-                                    if (studyMaterialUrl.isNotBlank()) {
-                                        FolderCard(
-                                            title = "Study Material",
-                                            icon = Icons.Default.Folder,
-                                            themeColor = themePrimaryColor
-                                        ) {
-                                            if (courseFee == 0.0 || paymentStatus == "approved") {
-                                                showStudyMaterialWebView = true
-                                            } else {
-                                                Toast.makeText(context, "Please unlock the course to access Study Materials.", Toast.LENGTH_SHORT).show()
+                            var attemptedCount = 0
+                            var totalAchievedScore = 0f
+                            var totalPossibleScore = 0f
+
+                            tests.forEach { test ->
+                                if (localStorage.isTestAttempted(courseId, test.name)) {
+                                    attemptedCount++
+                                    val score = localStorage.getTestScore(courseId, test.name)
+                                    if (score != null) {
+                                        totalAchievedScore += score.first
+                                        totalPossibleScore += score.second
+                                    }
+                                }
+                            }
+
+                            if (attemptedCount > 0) {
+                                val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
+                                val accuracy = if (totalPossibleScore > 0) ((totalAchievedScore / totalPossibleScore) * 100).toInt() else 0
+                                val accuracyColor = if (accuracy >= 70) Color(0xFF2E7D32) else if (accuracy >= 40) Color(0xFFE67E22) else Color(0xFFC62828)
+
+                                Text("Your Performance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    elevation = CardDefaults.cardElevation(2.dp),
+                                    shape = RoundedCornerShape(24.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(20.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Tests Completed", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                            Text("$attemptedCount / ${tests.size}", fontWeight = FontWeight.Black, color = themePrimaryColor, fontSize = 14.sp)
+                                        }
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        LinearProgressIndicator(
+                                            progress = attemptedCount.toFloat() / tests.size.coerceAtLeast(1).toFloat(),
+                                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                                            color = themePrimaryColor,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Overall Score", fontSize = 12.sp, color = Color.Gray)
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("${formatScore(totalAchievedScore)} / ${formatScore(totalPossibleScore)}", fontSize = 22.sp, fontWeight = FontWeight.Black, color = themePrimaryColor)
+                                            }
+                                            Divider(modifier = Modifier.height(40.dp).width(1.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Accuracy", fontSize = 12.sp, color = Color.Gray)
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("$accuracy%", fontSize = 22.sp, fontWeight = FontWeight.Black, color = accuracyColor)
                                             }
                                         }
                                     }
+                                }
+                                Spacer(modifier = Modifier.height(24.dp))
+                            }
 
-                                    if (tests.isNotEmpty()) {
-                                        FolderCard(
-                                            title = "Mock Tests",
-                                            icon = Icons.Default.Folder,
-                                            themeColor = themePrimaryColor
-                                        ) {
-                                            currentContentFolder = "MOCK_TESTS"
+                            if (paymentStatus == "approved") {
+                                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
+                                    Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = "Active", tint = Color(0xFF4CAF50), modifier = Modifier.size(32.dp))
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Column {
+                                            Text(text = "Course Unlocked", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                            if (subscriptionExpiry != null) Text(text = "Valid until ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(subscriptionExpiry!!)}", color = Color(0xFF388E3C), fontSize = 13.sp)
                                         }
                                     }
                                 }
-                            } else if (currentContentFolder == "MOCK_TESTS") {
-                                Column(modifier = Modifier.fillMaxSize()) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        IconButton(onClick = { currentContentFolder = null }) {
-                                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = themePrimaryColor)
+                            } else {
+                                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, themePrimaryColor), shape = RoundedCornerShape(24.dp)) {
+                                    Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column {
+                                            Text("Subscription Validity", fontSize = 12.sp, color = Color.Gray)
+                                            Text("$courseDuration Months Access", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
                                         }
-                                        Text("Mock Tests", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onBackground)
+                                        Text("₹${courseFee.toInt()}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = themePrimaryColor)
                                     }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(24.dp))
+                                OutlinedButton(onClick = { selectedTab = 1 }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor)) {
+                                    Text("View Course Content", fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.height(24.dp)) 
+                            }
+                        }
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
+                            if (isLoading) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = themePrimaryColor) }
+                            } else if (paymentStatus != "approved") {
+                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                    Spacer(modifier = Modifier.height(40.dp))
+                                    Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size(64.dp), tint = Color.LightGray)
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(text = if (paymentStatus == "expired") "Subscription Expired" else "Course Locked", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    if (paymentStatus == "pending") {
+                                        Text("Your payment is currently under review by the admin. Please check back later.", color = Color(0xFFE67E22), textAlign = TextAlign.Center)
+                                    } else {
+                                        Text(text = if (paymentStatus == "expired") "Your access has ended. Renew your subscription for $courseDuration Months to regain access." else "Unlock this course for $courseDuration Months to access all ${tests.size} premium mock tests.", color = Color.Gray, textAlign = TextAlign.Center)
+                                        Spacer(modifier = Modifier.height(32.dp))
+                                        
+                                        if (paymentStatus == "rejected") {
+                                            Text("Your previous payment was rejected. Please try again or contact the admin.", color = Color.Red, fontSize = 12.sp, textAlign = TextAlign.Center)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
+                                        
+                                        Button(
+                                            onClick = { showPaymentDialog = true }, modifier = Modifier.fillMaxWidth().height(55.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), shape = RoundedCornerShape(50)
+                                        ) {
+                                            Text(text = if (courseFee > 0) { if (paymentStatus == "expired") "RENEW FOR ₹${courseFee.toInt()}" else "PAY ₹${courseFee.toInt()} FOR $courseDuration MONTHS" } else "UNLOCK COURSE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        }
+                                    }
+                                }
+                            } else {
+                                if (selectedTab == 1) {
+                                    if (tests.isEmpty() && studyMaterialUrl.isBlank()) {
+                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
+                                            Text("No content found for this course yet.", color = Color.Gray) 
+                                        }
+                                    } else if (currentContentFolder == null) {
+                                        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                                            if (subscriptionExpiry != null) {
+                                                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = BorderStroke(1.dp, Color(0xFF4CAF50)), shape = RoundedCornerShape(24.dp)) {
+                                                    Text(text = "Active Subscription: Valid until ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(subscriptionExpiry!!)}", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(12.dp).fillMaxWidth(), fontSize = 13.sp)
+                                                }
+                                            }
 
-                                    LazyColumn(
-                                        modifier = Modifier.fillMaxWidth().weight(1f), 
-                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), 
-                                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                                    ) {
-                                        itemsIndexed(tests) { index, test ->
-                                            val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
-                                            val testScore = localStorage.getTestScore(courseId, test.name)
-                                            
-                                            // ALL TESTS UNLOCKED:
-                                            val isUnlocked = true
-                                            
-                                            Card(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(20.dp))
-                                                    .clickable(enabled = isUnlocked || alreadyAttempted) {
-                                                        if (alreadyAttempted) {
-                                                            onNavigateToExam(courseId, test.name, true)
-                                                        } else if (isUnlocked) {
-                                                            onNavigateToExam(courseId, test.name, false)
-                                                        }
-                                                    },
-                                                colors = CardDefaults.cardColors(
-                                                    containerColor = if (alreadyAttempted) Color(0xFFF9FAFB) 
-                                                                     else if (isUnlocked) MaterialTheme.colorScheme.surface 
-                                                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                                ),
-                                                elevation = CardDefaults.cardElevation(defaultElevation = if (isUnlocked) 4.dp else 0.dp),
-                                                border = if (alreadyAttempted) BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)) else null
+                                            if (studyMaterialUrl.isNotBlank()) {
+                                                FolderCard(
+                                                    title = "Study Material",
+                                                    icon = Icons.Default.Folder,
+                                                    themeColor = themePrimaryColor
+                                                ) {
+                                                    if (courseFee == 0.0 || paymentStatus == "approved") {
+                                                        showStudyMaterialWebView = true
+                                                    } else {
+                                                        Toast.makeText(context, "Please unlock the course to access Study Materials.", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+
+                                            if (tests.isNotEmpty()) {
+                                                FolderCard(
+                                                    title = "Mock Tests",
+                                                    icon = Icons.Default.Folder,
+                                                    themeColor = themePrimaryColor
+                                                ) {
+                                                    currentContentFolder = "MOCK_TESTS"
+                                                }
+                                            }
+                                        }
+                                    } else if (currentContentFolder == "MOCK_TESTS") {
+                                        Column(modifier = Modifier.fillMaxSize()) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Column(modifier = Modifier.padding(16.dp)) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.CenterVertically
+                                                IconButton(onClick = { currentContentFolder = null }) {
+                                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = themePrimaryColor)
+                                                }
+                                                Text("Mock Tests", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onBackground)
+                                            }
+
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxWidth().weight(1f), 
+                                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), 
+                                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                            ) {
+                                                itemsIndexed(tests) { index, test ->
+                                                    val alreadyAttempted = localStorage.isTestAttempted(courseId, test.name)
+                                                    val testScore = localStorage.getTestScore(courseId, test.name)
+                                                    
+                                                    // ALL TESTS UNLOCKED:
+                                                    val isUnlocked = true
+                                                    
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(20.dp))
+                                                            .clickable(enabled = isUnlocked || alreadyAttempted) {
+                                                                if (alreadyAttempted) {
+                                                                    onNavigateToExam(courseId, test.name, true)
+                                                                } else if (isUnlocked) {
+                                                                    onNavigateToExam(courseId, test.name, false)
+                                                                }
+                                                            },
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (alreadyAttempted) Color(0xFFF9FAFB) 
+                                                                             else if (isUnlocked) MaterialTheme.colorScheme.surface 
+                                                                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                        ),
+                                                        elevation = CardDefaults.cardElevation(defaultElevation = if (isUnlocked) 4.dp else 0.dp),
+                                                        border = if (alreadyAttempted) BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f)) else null
                                                     ) {
-                                                        // Icon and Title Block
-                                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(48.dp)
-                                                                    .background(
-                                                                        color = if (alreadyAttempted) Color(0xFFE8F5E9) else if (isUnlocked) themePrimaryColor.copy(alpha = 0.1f) else Color.LightGray.copy(alpha = 0.2f),
-                                                                        shape = CircleShape
-                                                                    ),
-                                                                contentAlignment = Alignment.Center
+                                                        Column(modifier = Modifier.padding(16.dp)) {
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
                                                             ) {
-                                                                Icon(
-                                                                    imageVector = if (alreadyAttempted) Icons.Default.CheckCircle else if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
-                                                                    contentDescription = null,
-                                                                    tint = if (alreadyAttempted) Color(0xFF4CAF50) else if (isUnlocked) themePrimaryColor else Color.Gray
-                                                                )
+                                                                // Icon and Title Block
+                                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .size(48.dp)
+                                                                            .background(
+                                                                                color = if (alreadyAttempted) Color(0xFFE8F5E9) else if (isUnlocked) themePrimaryColor.copy(alpha = 0.1f) else Color.LightGray.copy(alpha = 0.2f),
+                                                                                shape = CircleShape
+                                                                            ),
+                                                                        contentAlignment = Alignment.Center
+                                                                    ) {
+                                                                        Icon(
+                                                                            imageVector = if (alreadyAttempted) Icons.Default.CheckCircle else if (isUnlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                                                                            contentDescription = null,
+                                                                            tint = if (alreadyAttempted) Color(0xFF4CAF50) else if (isUnlocked) themePrimaryColor else Color.Gray
+                                                                        )
+                                                                    }
+                                                                    Spacer(modifier = Modifier.width(16.dp))
+                                                                    Column {
+                                                                        Text(
+                                                                            text = test.name,
+                                                                            style = MaterialTheme.typography.titleMedium,
+                                                                            fontWeight = FontWeight.Bold,
+                                                                            color = if (isUnlocked) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                                                            maxLines = 1,
+                                                                            overflow = TextOverflow.Ellipsis
+                                                                        )
+                                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                            Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                                            Text("${test.questionCount} Qs", fontSize = 12.sp, color = Color.Gray)
+                                                                            Spacer(modifier = Modifier.width(12.dp))
+                                                                            Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                                            Text("${test.timeMinutes} Mins", fontSize = 12.sp, color = Color.Gray)
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // Score Block (If Completed)
+                                                                if (alreadyAttempted && testScore != null) {
+                                                                    val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
+                                                                    Column(horizontalAlignment = Alignment.End) {
+                                                                        Text("Score", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                                                        Text(
+                                                                            text = "${formatScore(testScore.first)}/${formatScore(testScore.second)}",
+                                                                            color = Color(0xFF27AE60),
+                                                                            fontWeight = FontWeight.Black,
+                                                                            fontSize = 16.sp
+                                                                        )
+                                                                    }
+                                                                }
                                                             }
-                                                            Spacer(modifier = Modifier.width(16.dp))
-                                                            Column {
-                                                                Text(
-                                                                    text = test.name,
-                                                                    style = MaterialTheme.typography.titleMedium,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    color = if (isUnlocked) MaterialTheme.colorScheme.onSurface else Color.Gray,
-                                                                    maxLines = 1,
-                                                                    overflow = TextOverflow.Ellipsis
-                                                                )
-                                                                Spacer(modifier = Modifier.height(4.dp))
-                                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
-                                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                                    Text("${test.questionCount} Qs", fontSize = 12.sp, color = Color.Gray)
-                                                                    Spacer(modifier = Modifier.width(12.dp))
-                                                                    Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
-                                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                                    Text("${test.timeMinutes} Mins", fontSize = 12.sp, color = Color.Gray)
+
+                                                            Spacer(modifier = Modifier.height(16.dp))
+
+                                                            // Action Button
+                                                            if (alreadyAttempted) {
+                                                                OutlinedButton(
+                                                                    onClick = { onNavigateToExam(courseId, test.name, true) },
+                                                                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor),
+                                                                    shape = RoundedCornerShape(12.dp)
+                                                                ) {
+                                                                    Text("REVIEW EXAM", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                                }
+                                                            } else if (isUnlocked) {
+                                                                Button(
+                                                                    onClick = { onNavigateToExam(courseId, test.name, false) },
+                                                                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                                                                    colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor),
+                                                                    shape = RoundedCornerShape(12.dp)
+                                                                ) {
+                                                                    Text("START EXAM", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                                }
+                                                            } else {
+                                                                Button(
+                                                                    onClick = { },
+                                                                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                                                                    colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray, contentColor = Color.DarkGray),
+                                                                    shape = RoundedCornerShape(12.dp),
+                                                                    enabled = false
+                                                                ) {
+                                                                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                                    Text("LOCKED", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                                                 }
                                                             }
                                                         }
-
-                                                        // Score Block (If Completed)
-                                                        if (alreadyAttempted && testScore != null) {
-                                                            val formatScore = { value: Float -> if (value % 1.0f == 0f) value.toInt().toString() else value.toString() }
-                                                            Column(horizontalAlignment = Alignment.End) {
-                                                                Text("Score", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-                                                                Text(
-                                                                    text = "${formatScore(testScore.first)}/${formatScore(testScore.second)}",
-                                                                    color = Color(0xFF27AE60),
-                                                                    fontWeight = FontWeight.Black,
-                                                                    fontSize = 16.sp
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Spacer(modifier = Modifier.height(16.dp))
-
-                                                    // Action Button
-                                                    if (alreadyAttempted) {
-                                                        OutlinedButton(
-                                                            onClick = { onNavigateToExam(courseId, test.name, true) },
-                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
-                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = themePrimaryColor),
-                                                            shape = RoundedCornerShape(12.dp)
-                                                        ) {
-                                                            Text("REVIEW EXAM", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                                        }
-                                                    } else if (isUnlocked) {
-                                                        Button(
-                                                            onClick = { onNavigateToExam(courseId, test.name, false) },
-                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
-                                                            colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor),
-                                                            shape = RoundedCornerShape(12.dp)
-                                                        ) {
-                                                            Text("START EXAM", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                                        }
-                                                    } else {
-                                                        Button(
-                                                            onClick = { },
-                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
-                                                            colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray, contentColor = Color.DarkGray),
-                                                            shape = RoundedCornerShape(12.dp),
-                                                            enabled = false
-                                                        ) {
-                                                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                            Spacer(modifier = Modifier.width(8.dp))
-                                                            Text("LOCKED", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                                        }
                                                     }
                                                 }
                                             }
                                         }
                                     }
-                                }
-                            }
-                        } else if (selectedTab == 2) {
-                            if (bookmarkedQuestions.isEmpty()) {
-                                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                    Spacer(modifier = Modifier.height(40.dp))
-                                    Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text("No Saved Doubts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Gray)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(text = "When taking a mock test, tap the ⭐ icon next to difficult questions to save them here for quick revision!", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 14.sp)
-                                }
-                            } else {
-                                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    item { Text(text = "Review your saved questions. The correct answers are highlighted in green.", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)) }
-                                    items(bookmarkedQuestions) { bq ->
-                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(2.dp), shape = RoundedCornerShape(24.dp)) {
-                                            Column(modifier = Modifier.padding(16.dp)) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(Icons.Default.Star, contentDescription = "Saved", tint = Color(0xFFFFC107), modifier = Modifier.size(18.dp))
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text("${bq.testName} • ${bq.sectionName}", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                                Box(modifier = Modifier.fillMaxWidth()) {
-                                                    MathText(text = bq.questionText, fontSizePx = 16)
-                                                    Box(modifier = Modifier.matchParentSize().background(Color.Transparent)) 
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                                bq.options.forEachIndexed { index, opt ->
-                                                    val isCorrect = index == bq.correctOptionIndex
-                                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).background(if (isCorrect) Color(0xFFF0FDF4) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).border(1.dp, if (isCorrect) Color(0xFF4CAF50) else Color.Transparent, RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                        if (isCorrect) { Icon(Icons.Default.CheckCircle, contentDescription = "Correct", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(8.dp)) } 
-                                                        else { Spacer(modifier = Modifier.width(26.dp)) }
-                                                        Box(modifier = Modifier.weight(1f)) {
-                                                            MathText(text = opt, fontSizePx = 14, textColorHex = if (isCorrect) "#166534" else "#888888")
-                                                            Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
+                                } else if (selectedTab == 2) {
+                                    if (bookmarkedQuestions.isEmpty()) {
+                                        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                            Spacer(modifier = Modifier.height(40.dp))
+                                            Icon(Icons.Default.Star, contentDescription = "Star", tint = Color.LightGray, modifier = Modifier.size(64.dp))
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text("No Saved Doubts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.Gray)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(text = "When taking a mock test, tap the ⭐ icon next to difficult questions to save them here for quick revision!", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 14.sp)
+                                        }
+                                    } else {
+                                        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                            item { Text(text = "Review your saved questions. The correct answers are highlighted in green.", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)) }
+                                            items(bookmarkedQuestions) { bq ->
+                                                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(2.dp), shape = RoundedCornerShape(24.dp)) {
+                                                    Column(modifier = Modifier.padding(16.dp)) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(Icons.Default.Star, contentDescription = "Saved", tint = Color(0xFFFFC107), modifier = Modifier.size(18.dp))
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text("${bq.testName} • ${bq.sectionName}", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                                        }
+                                                        Spacer(modifier = Modifier.height(16.dp))
+                                                        Box(modifier = Modifier.fillMaxWidth()) {
+                                                            MathText(text = bq.questionText, fontSizePx = 16)
+                                                            Box(modifier = Modifier.matchParentSize().background(Color.Transparent)) 
+                                                        }
+                                                        Spacer(modifier = Modifier.height(16.dp))
+                                                        bq.options.forEachIndexed { index, opt ->
+                                                            val isCorrect = index == bq.correctOptionIndex
+                                                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).background(if (isCorrect) Color(0xFFF0FDF4) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).border(1.dp, if (isCorrect) Color(0xFF4CAF50) else Color.Transparent, RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                                if (isCorrect) { Icon(Icons.Default.CheckCircle, contentDescription = "Correct", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp)); Spacer(modifier = Modifier.width(8.dp)) } 
+                                                                else { Spacer(modifier = Modifier.width(26.dp)) }
+                                                                Box(modifier = Modifier.weight(1f)) {
+                                                                    MathText(text = opt, fontSizePx = 14, textColorHex = if (isCorrect) "#166534" else "#888888")
+                                                                    Box(modifier = Modifier.matchParentSize().background(Color.Transparent))
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -966,6 +968,40 @@ fun CourseDetailScreen(
                     }
                 }
             }
+        }
+        
+        // 🔹 GLOBAL WATERMARK OVERLAY
+        GlobalWatermark(email = userEmail)
+    }
+}
+
+@Composable
+fun GlobalWatermark(email: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.rotate(-35f) 
+        ) {
+            Text(
+                text = "JCV MOCK TESTS",
+                color = Color.Gray.copy(alpha = 0.15f), 
+                fontSize = 36.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = email,
+                color = Color.Gray.copy(alpha = 0.15f), 
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
