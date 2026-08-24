@@ -166,6 +166,7 @@ fun MainDashboardScreen(
         }
     }
 
+    // 🔹 ROOT BOX FOR WATERMARK OVERLAY
     Box(modifier = Modifier.fillMaxSize()) {
         ModalNavigationDrawer(
             drawerState = drawerState,
@@ -295,36 +296,36 @@ fun MainDashboardScreen(
             }
         }
         
-        // 🔹 OVERLAY WATERMARK EVERYWHERE
+        // 🔹 GLOBAL WATERMARK LAYERED ON TOP OF EVERYTHING
         GlobalWatermark(email = userEmail)
     }
 }
 
 @Composable
 fun GlobalWatermark(email: String) {
-    Column(
+    Box(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.SpaceEvenly,
-        horizontalAlignment = Alignment.CenterHorizontally
+        contentAlignment = Alignment.Center
     ) {
-        repeat(8) { row ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(x = if (row % 2 == 0) (-30).dp else 30.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                repeat(3) {
-                    Text(
-                        text = "JCV MOCK TESTS\n$email",
-                        color = Color.Gray.copy(alpha = 0.12f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.rotate(-30f)
-                    )
-                }
-            }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.rotate(-35f) // Angles the text nicely
+        ) {
+            Text(
+                text = "JCV MOCK TESTS",
+                color = Color.Gray.copy(alpha = 0.15f), // Transparent
+                fontSize = 36.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = email,
+                color = Color.Gray.copy(alpha = 0.15f), // Transparent
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -632,7 +633,7 @@ fun CourseCardView(course: CourseModel, isUnlocked: Boolean, onClick: () -> Unit
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            // 🔹 Top Row: App Logo + Duration Tag
+            // Top Row: App Logo + Duration Tag
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
