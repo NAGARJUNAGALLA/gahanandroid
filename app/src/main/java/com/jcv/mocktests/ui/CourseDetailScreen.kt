@@ -975,7 +975,7 @@ fun CourseDetailScreen(
     }
 }
 
-@Composable
+private @Composable
 fun GlobalWatermark(email: String) {
     Box(
         modifier = Modifier.fillMaxSize(),
