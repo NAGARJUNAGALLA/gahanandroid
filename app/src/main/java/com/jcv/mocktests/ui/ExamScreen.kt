@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.jcv.mocktests.models.Question
 import com.jcv.mocktests.models.QuestionState
 import com.jcv.mocktests.models.QuestionStatus
@@ -131,6 +132,40 @@ fun ExamScreen(
             .putString("${prefKey}_bookmarks", bmString)
             .putInt("${prefKey}_time", timeLeft)
             .apply()
+    }
+
+    // 🔹 ONE-TIME SYNC: Fetch all user scores from Firestore and save locally
+    LaunchedEffect(currentUser?.uid) {
+        val userId = currentUser?.uid
+        if (userId != null) {
+            val syncPrefKey = "scores_synced_$userId"
+            val hasSynced = prefs.getBoolean(syncPrefKey, false)
+            
+            if (!hasSynced) {
+                val db = FirebaseFirestore.getInstance()
+                db.collection("user_scores").document(userId).get()
+                    .addOnSuccessListener { doc ->
+                        if (doc.exists()) {
+                            val data = doc.data
+                            data?.forEach { (_, testData) ->
+                                if (testData is Map<*, *>) {
+                                    val cId = testData["courseId"] as? String ?: return@forEach
+                                    val tName = testData["testName"] as? String ?: return@forEach
+                                    val sc = (testData["score"] as? Number)?.toFloat() ?: 0f
+                                    val mSc = (testData["maxScore"] as? Number)?.toFloat() ?: 0f
+                                    
+                                    // Save downloaded data instead of reading document every time
+                                    localStorage.saveTestScore(cId, tName, sc, mSc)
+                                }
+                            }
+                            prefs.edit().putBoolean(syncPrefKey, true).apply()
+                        }
+                    }
+                    .addOnFailureListener {
+                        // Handle failure quietly; will retry next time since boolean is not set to true
+                    }
+            }
+        }
     }
 
     LaunchedEffect(courseId, testName) {
@@ -511,8 +546,27 @@ fun ExamScreen(
                                         totalIncorrect = wrongAnswers
                                         totalSkipped = skippedAnswers
                                         
+                                        // 🔹 SAVE SCORE LOCALLY
                                         localStorage.saveTestScore(courseId, testName, finalResultScore, finalMaxScore)
                                         
+                                        // 🔹 PUSH TO FIRESTORE: One User, One Document, SetOptions.merge
+                                        val userId = auth.currentUser?.uid
+                                        if (userId != null) {
+                                            val testData = mapOf(
+                                                "courseId" to courseId,
+                                                "testName" to testName,
+                                                "score" to finalResultScore,
+                                                "maxScore" to finalMaxScore,
+                                                "timestamp" to System.currentTimeMillis()
+                                            )
+                                            val db = FirebaseFirestore.getInstance()
+                                            // The key format allows fetching and looping all tests without conflicts
+                                            val scorePayload = mapOf("${courseId}_${testName}" to testData)
+                                            
+                                            db.collection("user_scores").document(userId)
+                                                .set(scorePayload, SetOptions.merge())
+                                        }
+
                                         com.jcv.mocktests.utils.AnalyticsHelper.logEvent("submit_exam") {
                                             putString("test_name", testName)
                                             putDouble("score", finalResultScore.toDouble())
