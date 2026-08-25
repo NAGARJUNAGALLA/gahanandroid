@@ -551,6 +551,9 @@ fun ExamScreen(
                                         
                                         // 🔹 PUSH TO FIRESTORE: One User, One Document, SetOptions.merge
                                         val userId = auth.currentUser?.uid
+                                        val userCurrentEmail = auth.currentUser?.email ?: "student@jcv.com"
+                                        val userCurrentName = auth.currentUser?.displayName ?: "Student"
+                                        
                                         if (userId != null) {
                                             val testData = mapOf(
                                                 "courseId" to courseId,
@@ -560,8 +563,13 @@ fun ExamScreen(
                                                 "timestamp" to System.currentTimeMillis()
                                             )
                                             val db = FirebaseFirestore.getInstance()
-                                            // The key format allows fetching and looping all tests without conflicts
-                                            val scorePayload = mapOf("${courseId}_${testName}" to testData)
+                                            
+                                            // Including email and name at root makes it easy to identify users in Admin console
+                                            val scorePayload = mapOf(
+                                                "email" to userCurrentEmail,
+                                                "name" to userCurrentName,
+                                                "${courseId}_${testName}" to testData
+                                            )
                                             
                                             db.collection("user_scores").document(userId)
                                                 .set(scorePayload, SetOptions.merge())
