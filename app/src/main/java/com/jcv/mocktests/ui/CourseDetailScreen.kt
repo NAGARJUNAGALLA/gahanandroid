@@ -160,6 +160,36 @@ fun CourseDetailScreen(
             }
         }
     }
+    // 🔹 ONE-TIME SYNC: Fetch all user scores from Firestore and save locally
+    LaunchedEffect(auth.currentUser?.uid) {
+        val userId = auth.currentUser?.uid
+        if (userId != null) {
+            val syncPrefKey = "scores_synced_$userId"
+            val hasSynced = examPrefs.getBoolean(syncPrefKey, false)
+            
+            if (!hasSynced) {
+                val db = FirebaseFirestore.getInstance()
+                db.collection("user_scores").document(userId).get()
+                    .addOnSuccessListener { doc ->
+                        if (doc.exists()) {
+                            val data = doc.data
+                            data?.forEach { (_, testData) ->
+                                if (testData is Map<*, *>) {
+                                    val cId = testData["courseId"] as? String ?: return@forEach
+                                    val tName = testData["testName"] as? String ?: return@forEach
+                                    val sc = (testData["score"] as? Number)?.toFloat() ?: 0f
+                                    val mSc = (testData["maxScore"] as? Number)?.toFloat() ?: 0f
+                                    
+                                    // Save downloaded data so the UI updates automatically
+                                    localStorage.saveTestScore(cId, tName, sc, mSc)
+                                }
+                            }
+                            examPrefs.edit().putBoolean(syncPrefKey, true).apply()
+                        }
+                    }
+            }
+        }
+    }
 
     LaunchedEffect(selectedTab) {
         if (selectedTab != 1) currentContentFolder = null
