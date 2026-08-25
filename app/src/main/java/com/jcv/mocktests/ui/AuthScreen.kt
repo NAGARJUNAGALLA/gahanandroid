@@ -11,18 +11,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,10 +47,12 @@ fun AuthScreen(
     onNavigateToSignup: () -> Unit
 ) {
     val themePrimaryColor = MaterialTheme.colorScheme.primary
-    val primaryGradient = Brush.verticalGradient(listOf(themePrimaryColor.copy(alpha = 0.75f), themePrimaryColor))
 
     var email by remember { mutableStateOf("") } 
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var rememberMe by remember { mutableStateOf(false) }
+    
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     
@@ -102,71 +110,133 @@ fun AuthScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         
-        // 1. HEADER LAYER (Bottom)
-        Box(
+        // MAIN SCROLLABLE CONTENT
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(320.dp)
-                .clip(RoundedCornerShape(bottomStart = 80.dp))
-                .background(primaryGradient)
+                .fillMaxSize()
+                .verticalScroll(scrollState),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(80.dp)) // Space for Theme Switcher
+
+            // 1. HEADER SECTION (Left Aligned like image)
             Column(
-                modifier = Modifier.fillMaxSize().padding(top = 80.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.Start
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.logo), contentDescription = "App Logo",
-                    modifier = Modifier.size(90.dp).background(Color.White, RoundedCornerShape(24.dp)).padding(8.dp)
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(Color.White, RoundedCornerShape(16.dp))
+                        .padding(8.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("JCV MOCK TESTS", fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Black)
-                Text("Welcome Back", fontSize = 16.sp, color = Color.White.copy(alpha = 0.8f))
+                Text("Welcome Back!", fontSize = 32.sp, color = themePrimaryColor, fontWeight = FontWeight.ExtraBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Log in to continue practicing\nwith JCV Mock Tests.", fontSize = 16.sp, color = Color.Gray, lineHeight = 22.sp)
             }
-        }
 
-        // 2. SCROLLABLE LOGIN CARD LAYER (Middle)
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(scrollState),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(240.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
+            // 2. LOGIN CARD (Solid primary background like image)
             Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                shape = RoundedCornerShape(24.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = themePrimaryColor),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Login to Continue", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    OutlinedTextField(
-                        value = email, onValueChange = { email = it }, label = { Text("Email Address") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    OutlinedTextField(
-                        value = password, onValueChange = { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(topEnd = 20.dp, bottomStart = 20.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = themePrimaryColor, focusedLabelColor = themePrimaryColor)
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    // EMAIL FIELD
+                    Text("Email Or User Name", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = email, 
+                        onValueChange = { email = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email", tint = Color.Gray) },
+                        trailingIcon = { if(email.isNotBlank()) Icon(Icons.Default.CheckCircle, contentDescription = "Valid", tint = themePrimaryColor) },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF0F4F8),
+                            unfocusedContainerColor = Color(0xFFF0F4F8),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = themePrimaryColor
+                        ),
+                        shape = RoundedCornerShape(8.dp)
                     )
                     
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // PASSWORD FIELD
+                    Text("Password", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextField(
+                        value = password, 
+                        onValueChange = { password = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password", tint = Color.Gray) },
+                        trailingIcon = {
+                            val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(imageVector = image, contentDescription = "Toggle Password Visibility", tint = Color.Gray)
+                            }
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF0F4F8),
+                            unfocusedContainerColor = Color(0xFFF0F4F8),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = themePrimaryColor
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // REMEMBER ME & FORGOT PASSWORD ROW
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = rememberMe,
+                                onCheckedChange = { rememberMe = it },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = Color.White,
+                                    uncheckedColor = Color.White,
+                                    checkmarkColor = themePrimaryColor
+                                )
+                            )
+                            Text("Remember me", color = Color.White, fontSize = 12.sp)
+                        }
                         Text(
-                            text = "Forgot Password?", color = themePrimaryColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(top = 8.dp).clickable { resetEmail = email; showResetDialog = true }.padding(4.dp)
+                            text = "Forgot Password?", 
+                            color = Color.White, 
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { resetEmail = email; showResetDialog = true }.padding(4.dp)
                         )
                     }
+
                     Spacer(modifier = Modifier.height(24.dp))
 
+                    // ERRORS & VERIFICATION
                     if (errorMessage != null) {
-                        Text(errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, textAlign = TextAlign.Center)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(errorMessage!!, color = Color(0xFFFFCDD2), fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
-
                     if (needsVerification) {
                         OutlinedButton(
                             onClick = {
@@ -177,10 +247,12 @@ fun AuthScreen(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF57C00))
-                        ) { if (isResending) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFFF57C00), strokeWidth = 2.dp) else Text("Resend Verification Link", fontWeight = FontWeight.Bold) }
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+                        ) { if (isResending) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Resend Verification Link", fontWeight = FontWeight.Bold) }
                     }
 
+                    // SIGN IN BUTTON
                     Button(
                         onClick = {
                             if (email.isBlank() || password.isBlank()) { errorMessage = "Please enter both fields"; return@Button }
@@ -197,20 +269,63 @@ fun AuthScreen(
                                 } else { isLoading = false; errorMessage = task.exception?.message ?: "Login Failed" }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(50.dp), enabled = !isLoading, shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(containerColor = themePrimaryColor)
-                    ) { if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White) else Text("Log In", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        enabled = !isLoading,
+                        shape = RoundedCornerShape(50),
+                        // Soft contrasting gradient style button for the primary box
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                            contentColor = Color.White
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
+                    ) { 
+                        if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White) 
+                        else Text("Sign in", fontWeight = FontWeight.Bold, fontSize = 16.sp) 
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // 3. BOTTOM SECTION (Social login placeholders & Register)
+            Text("OR LOGIN WITH", color = themePrimaryColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Placeholder circles mimicking the image
+                repeat(3) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .size(40.dp)
+                            .border(2.dp, themePrimaryColor, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(modifier = Modifier.size(16.dp).background(themePrimaryColor, CircleShape))
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
-            Row(modifier = Modifier.clickable { onNavigateToSignup() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.padding(bottom = 32.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text("Don't have an account? ", color = Color.Gray, fontSize = 14.sp)
-                Text("Sign Up", color = themePrimaryColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(
+                    text = "Register Now", 
+                    color = themePrimaryColor, 
+                    fontWeight = FontWeight.Bold, 
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable { onNavigateToSignup() }.padding(4.dp)
+                )
             }
-            Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // 3. THEME SWITCHER LAYER (Absolute Top Layer - Guarantees Clickability!)
+        // 4. THEME SWITCHER LAYER (Absolute Top Layer - Guarantees Clickability!)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -225,7 +340,7 @@ fun AuthScreen(
                         .size(if (currentTheme == themeOption) 26.dp else 20.dp)
                         .clip(CircleShape)
                         .background(themeOption.swatchColor)
-                        .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = Color.White, shape = CircleShape)
+                        .border(width = if (currentTheme == themeOption) 2.dp else 1.dp, color = themePrimaryColor.copy(alpha = 0.5f), shape = CircleShape)
                         .clickable { onThemeChange(themeOption) }
                 )
             }
